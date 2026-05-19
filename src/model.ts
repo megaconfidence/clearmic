@@ -21,13 +21,13 @@ const CLEANUP_PRESETS: Record<CleanupPreset, Omit<ModelOptions, "preset" | "outp
 	},
 };
 
-export function parseModelOptions(form: FormData): ModelOptions | string {
-	const preset = String(form.get("preset") ?? "balanced").toLowerCase();
+export function modelOptionsFromValues(presetInput: unknown, outputChoiceInput: unknown): ModelOptions | string {
+	const preset = String(presetInput ?? "balanced").toLowerCase();
 	if (!isCleanupPreset(preset)) {
 		return "Invalid cleanup preset.";
 	}
 
-	const outputChoice = String(form.get("output_choice") ?? "enhanced").toLowerCase();
+	const outputChoice = String(outputChoiceInput ?? "enhanced").toLowerCase();
 	if (!isOutputChoice(outputChoice)) {
 		return "Invalid output choice.";
 	}

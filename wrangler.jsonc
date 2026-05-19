@@ -7,6 +7,15 @@
 	"assets": {
 		"directory": "./public"
 	},
+	"vars": {
+		"APP_ORIGINS": "https://clearmic.conflare.workers.dev,https://clearmic.conflare.dev"
+	},
+	"send_email": [
+		{
+			"name": "EMAIL",
+			"remote": true
+		}
+	],
 	"r2_buckets": [
 		{
 			"binding": "AUDIO_BUCKET",
@@ -37,18 +46,16 @@
 			}
 		]
 	},
-	"ratelimits": [
-		{
-			"name": "UPLOAD_RATE_LIMITER",
-			"namespace_id": "10001",
-			"simple": {
-				"limit": 5,
-				"period": 60
-			}
-		}
-	],
 	"secrets": {
-		"required": ["REPLICATE_API_TOKEN"]
+		"required": [
+			"REPLICATE_API_TOKEN",
+			"EMAIL_FROM",
+			"TURNSTILE_SITE_KEY",
+			"TURNSTILE_SECRET_KEY",
+			"R2_ACCOUNT_ID",
+			"R2_ACCESS_KEY_ID",
+			"R2_SECRET_ACCESS_KEY"
+		]
 	},
 	"observability": {
 		"enabled": true

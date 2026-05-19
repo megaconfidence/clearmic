@@ -1,7 +1,7 @@
 export const MAX_UPLOAD_BYTES = 200 * 1024 * 1024;
 
-export function isAudioFile(file: File): boolean {
-	return file.type.startsWith("audio/") || /\.(aac|aif|aiff|flac|m4a|mp3|ogg|opus|wav|webm|wma)$/i.test(file.name);
+export function isAudioUpload(name: string, contentType: string): boolean {
+	return contentType.startsWith("audio/") || /\.(aac|aif|aiff|flac|m4a|mp3|ogg|opus|wav|webm|wma)$/i.test(name);
 }
 
 export function sanitizeFileName(name: string): string {

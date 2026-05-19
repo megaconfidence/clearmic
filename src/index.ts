@@ -1,7 +1,10 @@
+import { getCurrentUser, getMe, logout, requestOtp, unauthorized, verifyOtp } from "./auth";
 import { markJobFailed } from "./db";
-import { getErrorMessage, json } from "./http";
-import { createJob, downloadOutput, getInputAudio, getJobStatus, receiveReplicateWebhook } from "./jobs";
+import { HttpError, getErrorMessage, json } from "./http";
+import { downloadOutput, getInputAudio, getJobStatus, listJobs, receiveReplicateWebhook } from "./jobs";
 import { processQueuedJob } from "./replicate";
+import { getConfig } from "./turnstile";
+import { completeUpload, createUpload } from "./uploads";
 import type { AppEnv, ProcessJobMessage } from "./types";
 
 export default {
@@ -10,7 +13,11 @@ export default {
 			return await routeRequest(request, env);
 		} catch (error) {
 			console.error(error);
-			return json({ error: getErrorMessage(error) }, 500);
+			if (error instanceof HttpError) {
+				return json({ error: error.message }, error.status);
+			}
+
+			return json({ error: "Something went wrong. Please try again." }, 500);
 		}
 	},
 
@@ -34,8 +41,42 @@ async function routeRequest(request: Request, env: AppEnv): Promise<Response> {
 		return json({ error: "Not found" }, 404);
 	}
 
-	if (request.method === "POST" && url.pathname === "/api/jobs") {
-		return createJob(request, env);
+	if (request.method === "GET" && url.pathname === "/api/config") {
+		return getConfig(env);
+	}
+
+	if (request.method === "POST" && url.pathname === "/api/auth/request-otp") {
+		return requestOtp(request, env);
+	}
+
+	if (request.method === "POST" && url.pathname === "/api/auth/verify") {
+		return verifyOtp(request, env);
+	}
+
+	if (request.method === "GET" && url.pathname === "/api/me") {
+		return getMe(request, env);
+	}
+
+	if (request.method === "POST" && url.pathname === "/api/logout") {
+		return logout(request, env);
+	}
+
+	const user = await getCurrentUser(request, env);
+
+	if (request.method === "GET" && url.pathname === "/api/jobs") {
+		if (!user) return unauthorized();
+		return listJobs(env, user);
+	}
+
+	if (request.method === "POST" && url.pathname === "/api/uploads") {
+		if (!user) return unauthorized();
+		return createUpload(request, env, user);
+	}
+
+	const uploadMatch = /^\/api\/uploads\/([^/]+)\/complete$/.exec(url.pathname);
+	if (uploadMatch && request.method === "POST") {
+		if (!user) return unauthorized();
+		return completeUpload(decodeURIComponent(uploadMatch[1]), request, env, user);
 	}
 
 	const match = /^\/api\/jobs\/([^/]+)(?:\/([^/]+))?$/.exec(url.pathname);
@@ -47,7 +88,8 @@ async function routeRequest(request: Request, env: AppEnv): Promise<Response> {
 	const action = match[2];
 
 	if (!action && request.method === "GET") {
-		return getJobStatus(jobId, env);
+		if (!user) return unauthorized();
+		return getJobStatus(jobId, env, user);
 	}
 
 	if (action === "input" && request.method === "GET") {
@@ -55,7 +97,8 @@ async function routeRequest(request: Request, env: AppEnv): Promise<Response> {
 	}
 
 	if (action === "download" && request.method === "GET") {
-		return downloadOutput(jobId, url, env);
+		if (!user) return unauthorized();
+		return downloadOutput(jobId, url, env, user);
 	}
 
 	if (action === "webhook" && request.method === "POST") {

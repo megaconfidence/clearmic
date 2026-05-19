@@ -1,0 +1,13 @@
+{
+	"rules": [
+		{
+			"allowed": {
+				"origins": ["https://clearmic.conflare.workers.dev", "https://clearmic.conflare.dev"],
+				"methods": ["PUT"],
+				"headers": ["Content-Type", "Content-Length", "X-Amz-Meta-Clearmic-Upload-Id", "X-Amz-Meta-Clearmic-Expected-Size"]
+			},
+			"exposeHeaders": ["ETag"],
+			"maxAgeSeconds": 3600
+		}
+	]
+}

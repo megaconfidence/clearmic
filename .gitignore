@@ -165,3 +165,16 @@ dist
 .env*
 !.env.example
 .wrangler/
+
+# Local audio samples and uploads
+*.aac
+*.aif
+*.aiff
+*.flac
+*.m4a
+*.mp3
+*.ogg
+*.opus
+*.wav
+*.webm
+*.wma

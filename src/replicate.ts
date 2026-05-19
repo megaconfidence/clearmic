@@ -30,7 +30,7 @@ export async function processQueuedJob(message: ProcessJobMessage, env: AppEnv):
 		     replicate_prediction_id = ?, replicate_get_url = ?, replicate_web_url = ?, updated_at = ?
 		 WHERE id = ?`,
 	)
-		.bind("processing", prediction.id, prediction.urls?.get ?? null, prediction.urls?.web ?? null, now, job.id)
+		.bind("processing", prediction.id, optionalReplicateStatusUrl(prediction.urls?.get), prediction.urls?.web ?? null, now, job.id)
 		.run();
 }
 
@@ -39,7 +39,7 @@ export async function syncReplicatePrediction(job: JobRow, env: AppEnv): Promise
 		return job;
 	}
 
-	const getUrl = job.replicate_get_url ?? `https://api.replicate.com/v1/predictions/${job.replicate_prediction_id}`;
+	const getUrl = requireReplicateStatusUrl(job.replicate_get_url ?? `https://api.replicate.com/v1/predictions/${job.replicate_prediction_id}`);
 	const response = await fetch(getUrl, {
 		headers: {
 			Authorization: `Bearer ${env.REPLICATE_API_TOKEN}`,
@@ -48,7 +48,8 @@ export async function syncReplicatePrediction(job: JobRow, env: AppEnv): Promise
 	});
 
 	if (!response.ok) {
-		throw new Error(`Replicate status fetch failed: ${response.status} ${await safeResponseText(response)}`);
+		console.error(`Replicate status fetch failed: ${response.status} ${await safeResponseText(response)}`);
+		throw new Error("Replicate status fetch failed.");
 	}
 
 	const prediction = (await response.json()) as ReplicatePrediction;
@@ -72,9 +73,9 @@ export async function applyPredictionResult(job: JobRow, prediction: ReplicatePr
 		)
 			.bind(
 				status === "canceled" ? "canceled" : "failed",
-				prediction.error ?? `Replicate ${status}.`,
+				status === "canceled" ? "Processing was canceled." : "Audio cleanup failed.",
 				prediction.id,
-				prediction.urls?.get ?? null,
+				optionalReplicateStatusUrl(prediction.urls?.get),
 				prediction.urls?.web ?? null,
 				now,
 				job.id,
@@ -114,7 +115,8 @@ async function createReplicatePrediction(
 	});
 
 	if (!response.ok) {
-		throw new Error(`Replicate prediction failed: ${response.status} ${await safeResponseText(response)}`);
+		console.error(`Replicate prediction failed: ${response.status} ${await safeResponseText(response)}`);
+		throw new Error("Replicate prediction request failed.");
 	}
 
 	return (await response.json()) as ReplicatePrediction;
@@ -130,14 +132,12 @@ async function persistOutput(job: JobRow, prediction: ReplicatePrediction, env: 
 		await markJobFailed(env, job.id, "Replicate succeeded but returned no audio output URL.");
 		return (await getJob(env, job.id)) ?? job;
 	}
+	assertReplicateOutputUrl(outputUrl);
 
-	const outputResponse = await fetch(outputUrl, {
-		headers: {
-			Authorization: `Bearer ${env.REPLICATE_API_TOKEN}`,
-		},
-	});
+	const outputResponse = await fetch(outputUrl);
 	if (!outputResponse.ok || !outputResponse.body) {
-		throw new Error(`Failed to fetch Replicate output: ${outputResponse.status} ${await safeResponseText(outputResponse)}`);
+		console.error(`Failed to fetch Replicate output: ${outputResponse.status} ${await safeResponseText(outputResponse)}`);
+		throw new Error("Failed to fetch Replicate output.");
 	}
 
 	const outputContentType = outputResponse.headers.get("content-type") ?? "audio/wav";
@@ -167,7 +167,7 @@ async function persistOutput(job: JobRow, prediction: ReplicatePrediction, env: 
 			outputKey,
 			outputContentType,
 			prediction.id,
-			prediction.urls?.get ?? null,
+			optionalReplicateStatusUrl(prediction.urls?.get),
 			prediction.urls?.web ?? null,
 			now,
 			now,
@@ -176,6 +176,38 @@ async function persistOutput(job: JobRow, prediction: ReplicatePrediction, env: 
 		.run();
 
 	return (await getJob(env, job.id)) ?? job;
+}
+
+function optionalReplicateStatusUrl(value: string | undefined): string | null {
+	return value ? requireReplicateStatusUrl(value) : null;
+}
+
+function requireReplicateStatusUrl(value: string): string {
+	let url: URL;
+	try {
+		url = new URL(value);
+	} catch {
+		throw new Error("Replicate returned an invalid status URL.");
+	}
+
+	if (url.protocol !== "https:" || url.hostname !== "api.replicate.com" || !url.pathname.startsWith("/v1/predictions/")) {
+		throw new Error("Replicate returned an unexpected status URL host.");
+	}
+
+	return url.toString();
+}
+
+function assertReplicateOutputUrl(value: string): void {
+	let url: URL;
+	try {
+		url = new URL(value);
+	} catch {
+		throw new Error("Replicate returned an invalid output URL.");
+	}
+
+	if (url.protocol !== "https:" || (url.hostname !== "replicate.delivery" && !url.hostname.endsWith(".replicate.delivery"))) {
+		throw new Error("Replicate returned an unexpected output URL host.");
+	}
 }
 
 function normalizeReplicateStatus(status: string): "succeeded" | "failed" | "canceled" | "processing" {

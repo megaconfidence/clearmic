@@ -4,80 +4,123 @@
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>ClearMic</title>
+		<link rel="preconnect" href="https://challenges.cloudflare.com" />
 		<link rel="stylesheet" href="/styles.css" />
+		<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
 	</head>
 	<body>
 		<main>
 			<section class="hero" aria-label="ClearMic audio cleanup">
 				<div class="copy">
-					<div class="eyebrow"><span class="pulse"></span> Worker + R2 + D1 + Replicate</div>
+					<div class="eyebrow"><span class="pulse"></span> Private voice cleanup</div>
 					<h1>Noise out. Voice forward.</h1>
 					<p class="lede">
-						Upload a rough voice recording and ClearMic stores it in R2, tracks the job in D1, sends it to Replicate, then saves the cleaned WAV back to R2.
+						Pick an audio file, choose the cleanup style, verify your email, and download the cleaned WAV. Files are removed after 24 hours.
 					</p>
 					<div class="meter" aria-hidden="true"></div>
 				</div>
 
 				<div class="console">
-					<form class="panel" id="upload-form">
-						<label for="audio">Audio source</label>
-						<div class="dropzone">
-							<input id="audio" name="audio" type="file" accept="audio/*" required />
+					<div class="panel">
+						<div class="account-bar">
+							<span id="account-label">Not signed in</span>
+							<button class="ghost" id="logout" type="button" hidden>Sign out</button>
 						</div>
 
-						<div class="controls">
-							<fieldset class="choice-group">
-								<legend>Cleanup strength</legend>
-								<div class="choice-grid triple">
-									<label class="choice-card">
-										<input type="radio" name="preset" value="light" />
-										<span class="choice-title">Light</span>
-										<span class="choice-copy">Gentler pass for already decent room audio.</span>
-									</label>
-									<label class="choice-card">
-										<input type="radio" name="preset" value="balanced" checked />
-										<span class="choice-title">Balanced</span>
-										<span class="choice-copy">Default cleanup with a natural voice finish.</span>
-									</label>
-									<label class="choice-card">
-										<input type="radio" name="preset" value="aggressive" />
-										<span class="choice-title">Aggressive</span>
-										<span class="choice-copy">Harder denoise for fans, street bleed, and hum.</span>
-									</label>
-								</div>
-							</fieldset>
-
-							<fieldset class="choice-group">
-								<legend>Output file</legend>
-								<div class="choice-grid double">
-									<label class="choice-card">
-										<input type="radio" name="output_choice" value="enhanced" checked />
-										<span class="choice-title">Enhanced</span>
-										<span class="choice-copy">Polished voice with denoise plus enhancement.</span>
-									</label>
-									<label class="choice-card">
-										<input type="radio" name="output_choice" value="denoised" />
-										<span class="choice-title">Denoised</span>
-										<span class="choice-copy">Cleaner source with less enhancement color.</span>
-									</label>
-								</div>
-							</fieldset>
-						</div>
-
-						<button id="submit" type="submit">Clean this recording</button>
-
-						<div class="status" id="status" hidden>
-							<div class="row"><span>Status</span><strong id="job-status">-</strong></div>
-							<div class="row"><span>File</span><strong id="job-file">-</strong></div>
-							<div class="row"><span>Preset</span><strong id="job-preset">-</strong></div>
-							<div class="row"><span>Output</span><strong id="job-output">-</strong></div>
-							<p class="error" id="error" hidden></p>
-							<div id="result" hidden>
-								<audio id="player" controls></audio>
-								<a class="download" id="download">Download cleaned WAV</a>
+						<section class="step" data-step="file">
+							<label for="audio">Audio source</label>
+							<div class="dropzone">
+								<input id="audio" name="audio" type="file" accept="audio/*" />
 							</div>
-						</div>
-					</form>
+							<button id="file-next" type="button">Continue</button>
+						</section>
+
+						<section class="step" data-step="options" hidden>
+							<div class="controls">
+								<fieldset class="choice-group">
+									<legend>Cleanup strength</legend>
+									<div class="choice-grid triple">
+										<label class="choice-card">
+											<input type="radio" name="preset" value="light" />
+											<span class="choice-title">Light</span>
+											<span class="choice-copy">Gentler pass for already decent room audio.</span>
+										</label>
+										<label class="choice-card">
+											<input type="radio" name="preset" value="balanced" checked />
+											<span class="choice-title">Balanced</span>
+											<span class="choice-copy">Default cleanup with a natural voice finish.</span>
+										</label>
+										<label class="choice-card">
+											<input type="radio" name="preset" value="aggressive" />
+											<span class="choice-title">Aggressive</span>
+											<span class="choice-copy">Harder denoise for fans, street bleed, and hum.</span>
+										</label>
+									</div>
+								</fieldset>
+
+								<fieldset class="choice-group">
+									<legend>Output file</legend>
+									<div class="choice-grid double">
+										<label class="choice-card">
+											<input type="radio" name="output_choice" value="enhanced" checked />
+											<span class="choice-title">Enhanced</span>
+											<span class="choice-copy">Polished voice with denoise plus enhancement.</span>
+										</label>
+										<label class="choice-card">
+											<input type="radio" name="output_choice" value="denoised" />
+											<span class="choice-title">Denoised</span>
+											<span class="choice-copy">Cleaner source with less enhancement color.</span>
+										</label>
+									</div>
+								</fieldset>
+							</div>
+							<div class="actions">
+								<button class="ghost" data-back="file" type="button">Back</button>
+								<button id="options-next" type="button">Continue</button>
+							</div>
+						</section>
+
+						<section class="step" data-step="auth" hidden>
+							<label for="email">Email login</label>
+							<input class="text-input" id="email" type="email" autocomplete="email" placeholder="you@example.com" />
+							<div class="verification">
+								<label>Verification</label>
+								<div id="turnstile-widget"></div>
+								<p class="hint" id="turnstile-status">Loading verification...</p>
+							</div>
+							<button id="send-code" type="button">Send login code</button>
+							<div id="code-block" hidden>
+								<label for="code">6-digit code</label>
+								<input class="text-input" id="code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" />
+								<button id="verify-code" type="button">Verify and upload</button>
+							</div>
+							<button class="ghost" data-back="options" type="button">Back</button>
+						</section>
+
+						<section class="step" data-step="processing" hidden>
+							<div class="status" id="status">
+								<div class="row"><span>Status</span><strong id="job-status">-</strong></div>
+								<div class="row"><span>File</span><strong id="job-file">-</strong></div>
+								<div class="row"><span>Preset</span><strong id="job-preset">-</strong></div>
+								<div class="row"><span>Output</span><strong id="job-output">-</strong></div>
+								<div class="row"><span>Deletes in</span><strong id="job-expiry">-</strong></div>
+								<div id="result" hidden>
+									<audio id="player" controls></audio>
+									<a class="download" id="download">Download cleaned WAV</a>
+								</div>
+							</div>
+							<button class="ghost" id="new-file" type="button">Clean another file</button>
+						</section>
+
+						<p class="error" id="error" hidden></p>
+
+						<section class="previous">
+							<div class="row heading"><span>Previous files</span><strong id="previous-count">0</strong></div>
+							<div class="job-list" id="job-list">
+								<p class="empty">Sign in to see files that have not expired.</p>
+							</div>
+						</section>
+					</div>
 				</div>
 			</section>
 		</main>

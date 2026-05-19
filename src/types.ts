@@ -1,6 +1,6 @@
 export type JobStatus = "queued" | "processing" | "completed" | "failed" | "canceled";
 export type CleanupPreset = "light" | "balanced" | "aggressive";
-export type Solver = "Midpoint" | "RK4" | "Euler";
+export type Solver = "Midpoint" | "RK4";
 export type OutputChoice = "enhanced" | "denoised";
 
 export type ProcessJobMessage = {
@@ -10,6 +10,17 @@ export type ProcessJobMessage = {
 
 export type AppEnv = Omit<Env, "AUDIO_QUEUE"> & {
 	AUDIO_QUEUE: Queue<ProcessJobMessage>;
+};
+
+export type User = {
+	id: string;
+	email: string;
+};
+
+export type OtpCodeRow = {
+	id: string;
+	code_hash: string;
+	attempts: number;
 };
 
 export type ModelOptions = {
@@ -22,6 +33,7 @@ export type ModelOptions = {
 
 export type JobRow = {
 	id: string;
+	user_id: string | null;
 	status: JobStatus;
 	input_key: string;
 	input_name: string;
@@ -40,17 +52,35 @@ export type JobRow = {
 	input_token: string;
 	download_token: string;
 	webhook_token: string;
+	expires_at: string;
+};
+
+export type UploadIntentRow = {
+	id: string;
+	user_id: string;
+	input_key: string;
+	input_name: string;
+	input_content_type: string | null;
+	input_size: number;
+	preset: CleanupPreset;
+	solver: Solver;
+	number_function_evaluations: number;
+	prior_temperature: number;
+	output_choice: OutputChoice;
+	input_token: string;
+	download_token: string;
+	webhook_token: string;
+	expires_at: string;
+	upload_expires_at: string;
 };
 
 export type ReplicatePrediction = {
 	id: string;
 	status: string;
 	output?: unknown;
-	error?: string | null;
 	urls?: {
 		get?: string;
 		web?: string;
-		cancel?: string;
 	};
 };
 
@@ -63,4 +93,5 @@ export type PublicJob = {
 	inputSize: number;
 	error: string | null;
 	downloadUrl: string | null;
+	expiresAt: string;
 };
