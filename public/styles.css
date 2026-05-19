@@ -149,35 +149,25 @@ button {
 .brand {
 	display: inline-flex;
 	align-items: center;
-	gap: 9px;
+	gap: 10px;
 	font-size: 14px;
 	font-weight: 600;
 	letter-spacing: -0.01em;
 	color: var(--text);
-	transition: opacity 160ms var(--ease);
-}
-
-.brand:hover {
-	opacity: 0.7;
 }
 
 .brand-mark {
-	width: 9px;
-	height: 9px;
-	border-radius: 999px;
-	background: var(--accent);
-	box-shadow: 0 0 0 3px var(--accent-soft);
-	animation: brandBreathe 3.2s ease-in-out infinite;
+	width: 22px;
+	height: 22px;
+	display: block;
+	flex-shrink: 0;
+	box-shadow: 0 1px 3px rgba(55, 60, 255, 0.18);
+	border-radius: 5px;
+	transition: transform 240ms var(--ease-spring);
 }
 
-@keyframes brandBreathe {
-	0%,
-	100% {
-		box-shadow: 0 0 0 3px var(--accent-soft);
-	}
-	50% {
-		box-shadow: 0 0 0 5px var(--accent-soft);
-	}
+.brand:hover .brand-mark {
+	transform: rotate(-3deg) scale(1.04);
 }
 
 .nav-right {

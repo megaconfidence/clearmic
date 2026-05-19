@@ -5,6 +5,9 @@
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<meta name="color-scheme" content="light" />
 		<title>ClearMic</title>
+		<link rel="icon" type="image/svg+xml" href="/icon.svg" />
+		<link rel="apple-touch-icon" href="/icon.svg" />
+		<meta name="theme-color" content="#373cff" />
 		<link rel="preconnect" href="https://fonts.googleapis.com" />
 		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link rel="preconnect" href="https://challenges.cloudflare.com" />
@@ -18,7 +21,7 @@
 	<body>
 		<nav class="nav">
 			<a class="brand" href="/" aria-label="ClearMic home">
-				<span class="brand-mark" aria-hidden="true"></span>
+				<img class="brand-mark" src="/icon.svg" alt="" width="22" height="22" />
 				<span>ClearMic</span>
 			</a>
 			<div class="nav-right">
@@ -27,7 +30,8 @@
 					<span class="quota-label">left today</span>
 				</div>
 				<div class="account">
-					<span class="account-label" id="account-label">Guest</span>
+					<button class="link" id="sign-in" type="button">Sign in</button>
+					<span class="account-label" id="account-label" hidden></span>
 					<button class="link" id="logout" type="button" hidden>Sign out</button>
 				</div>
 			</div>
@@ -99,11 +103,11 @@
 						<span class="opt-label">Strength</span>
 						<div class="opt-row">
 							<label class="opt-card">
-								<input type="radio" name="preset" value="light" />
+								<input type="radio" name="preset" value="light" checked />
 								<span>Light</span>
 							</label>
 							<label class="opt-card">
-								<input type="radio" name="preset" value="balanced" checked />
+								<input type="radio" name="preset" value="balanced" />
 								<span>Balanced</span>
 							</label>
 							<label class="opt-card">
@@ -117,11 +121,11 @@
 						<span class="opt-label">Output</span>
 						<div class="opt-row">
 							<label class="opt-card">
-								<input type="radio" name="output_choice" value="enhanced" checked />
+								<input type="radio" name="output_choice" value="enhanced" />
 								<span>Enhanced</span>
 							</label>
 							<label class="opt-card">
-								<input type="radio" name="output_choice" value="denoised" />
+								<input type="radio" name="output_choice" value="denoised" checked />
 								<span>Denoised</span>
 							</label>
 						</div>
@@ -134,8 +138,8 @@
 				</section>
 
 				<section class="step" data-step="auth" hidden>
-					<h1>Verify email</h1>
-					<p class="hint">We'll save your file to your account.</p>
+					<h1 id="auth-title">Verify email</h1>
+					<p class="hint" id="auth-sub">We'll save your file to your account.</p>
 
 					<div class="field">
 						<input class="input" id="email" type="email" autocomplete="email" placeholder="you@example.com" />

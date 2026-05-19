@@ -34,6 +34,11 @@ const fields = {
 	fileClear: document.getElementById("file-clear"),
 	quota: document.getElementById("quota"),
 	quotaNum: document.getElementById("quota-num"),
+	signIn: document.getElementById("sign-in"),
+	authTitle: document.getElementById("auth-title"),
+	authSub: document.getElementById("auth-sub"),
+	authBack: document.querySelector('[data-step="auth"] [data-back]'),
+	verifyCode: document.getElementById("verify-code"),
 };
 
 let currentUser = null;
@@ -62,9 +67,14 @@ document.getElementById("options-next").addEventListener("click", () => {
 });
 
 document.getElementById("send-code").addEventListener("click", requestOtp);
-document.getElementById("verify-code").addEventListener("click", verifyOtpAndUpload);
+fields.verifyCode.addEventListener("click", verifyAndContinue);
 document.getElementById("new-file").addEventListener("click", resetFlow);
 fields.logout.addEventListener("click", logout);
+fields.signIn.addEventListener("click", () => {
+	showError("");
+	showStep("auth");
+	requestAnimationFrame(() => fields.email.focus());
+});
 
 for (const button of document.querySelectorAll("[data-back]")) {
 	button.addEventListener("click", () => showStep(button.dataset.back));
@@ -229,7 +239,7 @@ async function requestOtp() {
 	}
 }
 
-async function verifyOtpAndUpload() {
+async function verifyAndContinue() {
 	showError("");
 	setBusy(true);
 	try {
@@ -239,7 +249,16 @@ async function verifyOtpAndUpload() {
 		});
 		currentUser = payload.user;
 		renderAccount();
-		await uploadSelectedFile();
+
+		if (fields.audio.files[0]) {
+			await uploadSelectedFile();
+		} else {
+			await loadJobs();
+			fields.codeBlock.hidden = true;
+			clearCodeCells();
+			showStep("file");
+			setBusy(false);
+		}
 	} catch (error) {
 		showError(error.message || String(error));
 		setBusy(false);
@@ -263,8 +282,8 @@ async function uploadSelectedFile() {
 
 	try {
 		const file = fields.audio.files[0];
-		const preset = selectedRadio("preset", "balanced");
-		const outputChoice = selectedRadio("output_choice", "enhanced");
+		const preset = selectedRadio("preset", "light");
+		const outputChoice = selectedRadio("output_choice", "denoised");
 
 		const uploadPayload = await api("/api/uploads", {
 			method: "POST",
@@ -477,8 +496,17 @@ function createJobCard(job, index = 0) {
 }
 
 function renderAccount() {
-	fields.accountLabel.textContent = currentUser ? currentUser.email : "Guest";
-	fields.logout.hidden = !currentUser;
+	if (currentUser) {
+		fields.signIn.hidden = true;
+		fields.accountLabel.textContent = currentUser.email;
+		fields.accountLabel.hidden = false;
+		fields.logout.hidden = false;
+	} else {
+		fields.signIn.hidden = false;
+		fields.accountLabel.textContent = "";
+		fields.accountLabel.hidden = true;
+		fields.logout.hidden = true;
+	}
 }
 
 function renderQuota(quota) {
@@ -498,20 +526,36 @@ function showStep(name) {
 	for (const step of steps) {
 		step.hidden = step.dataset.step !== name;
 	}
+	if (name === "auth") {
+		applyAuthCopy();
+	}
 	updateStepDots(name);
 }
 
+function applyAuthCopy() {
+	const hasFile = Boolean(fields.audio.files[0]);
+	fields.authTitle.textContent = hasFile ? "Verify email" : "Sign in";
+	fields.authSub.textContent = hasFile
+		? "We'll save your file to your account."
+		: "Pick up where you left off.";
+	fields.verifyCode.textContent = hasFile ? "Verify and upload" : "Sign in";
+	fields.authBack.dataset.back = hasFile ? "options" : "file";
+}
+
 function updateStepDots(current) {
-	const stepIdx = STEPS.indexOf(current);
-	const visited = new Set();
-	for (let i = 0; i < stepIdx; i++) visited.add(STEPS[i]);
-	if (current === "processing" && currentUser) visited.add("auth");
+	const hasFile = Boolean(fields.audio.files[0]);
+	const isPastOptions = STEPS.indexOf(current) > STEPS.indexOf("options");
 
 	for (const name of STEPS) {
 		const dot = stepDots[name];
 		if (!dot) continue;
-		dot.classList.toggle("active", name === current);
-		dot.classList.toggle("done", visited.has(name));
+		const isActive = name === current;
+		let isDone = false;
+		if (name === "file") isDone = hasFile;
+		else if (name === "options") isDone = hasFile && isPastOptions;
+		else if (name === "auth") isDone = Boolean(currentUser);
+		dot.classList.toggle("active", isActive);
+		dot.classList.toggle("done", isDone && !isActive);
 	}
 }
 
