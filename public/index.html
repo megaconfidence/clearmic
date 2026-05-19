@@ -3,127 +3,206 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta name="color-scheme" content="light" />
 		<title>ClearMic</title>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 		<link rel="preconnect" href="https://challenges.cloudflare.com" />
+		<link
+			rel="stylesheet"
+			href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+		/>
 		<link rel="stylesheet" href="/styles.css" />
 		<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
 	</head>
 	<body>
+		<nav class="nav">
+			<a class="brand" href="/" aria-label="ClearMic home">
+				<span class="brand-mark" aria-hidden="true"></span>
+				<span>ClearMic</span>
+			</a>
+			<div class="account">
+				<span class="account-label" id="account-label">Guest</span>
+				<button class="link" id="logout" type="button" hidden>Sign out</button>
+			</div>
+		</nav>
+
 		<main>
-			<section class="hero" aria-label="ClearMic audio cleanup">
-				<div class="copy">
-					<div class="eyebrow"><span class="pulse"></span> Private voice cleanup</div>
-					<h1>Noise out. Voice forward.</h1>
-					<p class="lede">
-						Pick an audio file, choose the cleanup style, verify your email, and download the cleaned WAV. Files are removed after 24 hours.
-					</p>
-					<div class="meter" aria-hidden="true"></div>
+			<section class="card">
+				<div class="progress" aria-hidden="true">
+					<span class="dot" data-dot="file"></span>
+					<span class="dot" data-dot="options"></span>
+					<span class="dot" data-dot="auth"></span>
+					<span class="dot" data-dot="processing"></span>
 				</div>
 
-				<div class="console">
-					<div class="panel">
-						<div class="account-bar">
-							<span id="account-label">Not signed in</span>
-							<button class="ghost" id="logout" type="button" hidden>Sign out</button>
+				<section class="step" data-step="file">
+					<h1>Upload audio</h1>
+
+					<div class="dropzone" id="dropzone">
+						<input id="audio" name="audio" type="file" accept="audio/*" aria-label="Audio file" />
+						<div class="dropzone-empty">
+							<svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+								<path
+									d="M12 15V4M12 4L7.5 8.5M12 4L16.5 8.5M5 19h14"
+									stroke="currentColor"
+									stroke-width="1.5"
+									stroke-linecap="round"
+									stroke-linejoin="round"
+								/>
+							</svg>
+							<p class="dropzone-title">Drop file or click</p>
+							<p class="hint">WAV · MP3 · M4A · up to 200 MB</p>
 						</div>
-
-						<section class="step" data-step="file">
-							<label for="audio">Audio source</label>
-							<div class="dropzone">
-								<input id="audio" name="audio" type="file" accept="audio/*" />
-							</div>
-							<button id="file-next" type="button">Continue</button>
-						</section>
-
-						<section class="step" data-step="options" hidden>
-							<div class="controls">
-								<fieldset class="choice-group">
-									<legend>Cleanup strength</legend>
-									<div class="choice-grid triple">
-										<label class="choice-card">
-											<input type="radio" name="preset" value="light" />
-											<span class="choice-title">Light</span>
-											<span class="choice-copy">Gentler pass for already decent room audio.</span>
-										</label>
-										<label class="choice-card">
-											<input type="radio" name="preset" value="balanced" checked />
-											<span class="choice-title">Balanced</span>
-											<span class="choice-copy">Default cleanup with a natural voice finish.</span>
-										</label>
-										<label class="choice-card">
-											<input type="radio" name="preset" value="aggressive" />
-											<span class="choice-title">Aggressive</span>
-											<span class="choice-copy">Harder denoise for fans, street bleed, and hum.</span>
-										</label>
-									</div>
-								</fieldset>
-
-								<fieldset class="choice-group">
-									<legend>Output file</legend>
-									<div class="choice-grid double">
-										<label class="choice-card">
-											<input type="radio" name="output_choice" value="enhanced" checked />
-											<span class="choice-title">Enhanced</span>
-											<span class="choice-copy">Polished voice with denoise plus enhancement.</span>
-										</label>
-										<label class="choice-card">
-											<input type="radio" name="output_choice" value="denoised" />
-											<span class="choice-title">Denoised</span>
-											<span class="choice-copy">Cleaner source with less enhancement color.</span>
-										</label>
-									</div>
-								</fieldset>
-							</div>
-							<div class="actions">
-								<button class="ghost" data-back="file" type="button">Back</button>
-								<button id="options-next" type="button">Continue</button>
-							</div>
-						</section>
-
-						<section class="step" data-step="auth" hidden>
-							<label for="email">Email login</label>
-							<input class="text-input" id="email" type="email" autocomplete="email" placeholder="you@example.com" />
-							<div class="verification">
-								<label>Verification</label>
-								<div id="turnstile-widget"></div>
-								<p class="hint" id="turnstile-status">Loading verification...</p>
-							</div>
-							<button id="send-code" type="button">Send login code</button>
-							<div id="code-block" hidden>
-								<label for="code">6-digit code</label>
-								<input class="text-input" id="code" type="text" inputmode="numeric" maxlength="6" autocomplete="one-time-code" />
-								<button id="verify-code" type="button">Verify and upload</button>
-							</div>
-							<button class="ghost" data-back="options" type="button">Back</button>
-						</section>
-
-						<section class="step" data-step="processing" hidden>
-							<div class="status" id="status">
-								<div class="row"><span>Status</span><strong id="job-status">-</strong></div>
-								<div class="row"><span>File</span><strong id="job-file">-</strong></div>
-								<div class="row"><span>Preset</span><strong id="job-preset">-</strong></div>
-								<div class="row"><span>Output</span><strong id="job-output">-</strong></div>
-								<div class="row"><span>Deletes in</span><strong id="job-expiry">-</strong></div>
-								<div id="result" hidden>
-									<audio id="player" controls></audio>
-									<a class="download" id="download">Download cleaned WAV</a>
+						<div class="dropzone-filled" hidden>
+							<div class="file-tag">
+								<span class="file-icon" aria-hidden="true">
+									<svg viewBox="0 0 24 24" fill="none">
+										<path
+											d="M5 12v0M8 9v6M11 6v12M14 8v8M17 10v4M20 12v0"
+											stroke="currentColor"
+											stroke-width="1.5"
+											stroke-linecap="round"
+										/>
+									</svg>
+								</span>
+								<div class="file-info">
+									<strong id="file-name">file.wav</strong>
+									<span class="hint mono"><span id="file-size">—</span> · <span id="file-type">audio</span></span>
 								</div>
+								<button class="icon-btn" id="file-clear" type="button" aria-label="Remove file">
+									<svg viewBox="0 0 16 16" fill="none">
+										<path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+									</svg>
+								</button>
 							</div>
-							<button class="ghost" id="new-file" type="button">Clean another file</button>
-						</section>
-
-						<p class="error" id="error" hidden></p>
-
-						<section class="previous">
-							<div class="row heading"><span>Previous files</span><strong id="previous-count">0</strong></div>
-							<div class="job-list" id="job-list">
-								<p class="empty">Sign in to see files that have not expired.</p>
-							</div>
-						</section>
+						</div>
 					</div>
-				</div>
+
+					<div class="actions end">
+						<button class="primary" id="file-next" type="button">Continue</button>
+					</div>
+				</section>
+
+				<section class="step" data-step="options" hidden>
+					<h1>Options</h1>
+
+					<div class="opt-group">
+						<span class="opt-label">Strength</span>
+						<div class="opt-row">
+							<label class="opt-card">
+								<input type="radio" name="preset" value="light" />
+								<span>Light</span>
+							</label>
+							<label class="opt-card">
+								<input type="radio" name="preset" value="balanced" checked />
+								<span>Balanced</span>
+							</label>
+							<label class="opt-card">
+								<input type="radio" name="preset" value="aggressive" />
+								<span>Aggressive</span>
+							</label>
+						</div>
+					</div>
+
+					<div class="opt-group">
+						<span class="opt-label">Output</span>
+						<div class="opt-row">
+							<label class="opt-card">
+								<input type="radio" name="output_choice" value="enhanced" checked />
+								<span>Enhanced</span>
+							</label>
+							<label class="opt-card">
+								<input type="radio" name="output_choice" value="denoised" />
+								<span>Denoised</span>
+							</label>
+						</div>
+					</div>
+
+					<div class="actions">
+						<button class="ghost" data-back="file" type="button">Back</button>
+						<button class="primary" id="options-next" type="button">Continue</button>
+					</div>
+				</section>
+
+				<section class="step" data-step="auth" hidden>
+					<h1>Verify email</h1>
+
+					<div class="field">
+						<input class="input" id="email" type="email" autocomplete="email" placeholder="you@example.com" />
+					</div>
+
+					<div class="field">
+						<div class="turnstile-shell">
+							<div id="turnstile-widget"></div>
+						</div>
+						<p class="hint" id="turnstile-status">Loading verification…</p>
+					</div>
+
+					<button class="primary block" id="send-code" type="button">Send code</button>
+
+					<div class="code-section" id="code-block" hidden>
+						<div class="field">
+							<div class="code-cells">
+								<input class="code-cell" data-cell="0" type="text" inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Digit 1" />
+								<input class="code-cell" data-cell="1" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 2" />
+								<input class="code-cell" data-cell="2" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 3" />
+								<input class="code-cell" data-cell="3" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 4" />
+								<input class="code-cell" data-cell="4" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 5" />
+								<input class="code-cell" data-cell="5" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 6" />
+							</div>
+							<input type="hidden" id="code" />
+							<p class="hint">Check your inbox. Code expires in 10 minutes.</p>
+						</div>
+						<button class="primary block" id="verify-code" type="button">Verify and upload</button>
+					</div>
+
+					<div class="actions">
+						<button class="ghost" data-back="options" type="button">Back</button>
+					</div>
+				</section>
+
+				<section class="step" data-step="processing" hidden>
+					<h1 id="processing-title">Processing</h1>
+					<p class="hint" id="processing-sub">Usually under a minute.</p>
+
+					<div class="proc-meta">
+						<div class="proc-row">
+							<span>Status</span>
+							<span class="status-badge" id="job-status" data-state="pending">pending</span>
+						</div>
+						<div class="proc-row">
+							<span>File</span>
+							<span class="proc-value" id="job-file">—</span>
+						</div>
+						<div class="proc-row">
+							<span>Expires</span>
+							<span class="proc-value tabular" id="job-expiry">—</span>
+						</div>
+					</div>
+
+					<div class="result" id="result" hidden>
+						<audio class="player" id="player" controls preload="metadata"></audio>
+						<a class="primary block" id="download" download="clearmic-cleaned.wav">Download</a>
+					</div>
+
+					<div class="actions">
+						<button class="ghost" id="new-file" type="button">Clean another</button>
+					</div>
+				</section>
+
+				<div class="error" id="error" hidden role="alert"></div>
+			</section>
+
+			<section class="library" id="library" hidden>
+				<header class="library-header">
+					<h2>Recent</h2>
+					<span class="hint mono"><span id="previous-count">0</span> active</span>
+				</header>
+				<div class="job-list" id="job-list"></div>
 			</section>
 		</main>
+
 		<script src="/app.js"></script>
 	</body>
 </html>
