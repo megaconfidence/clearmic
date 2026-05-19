@@ -2,6 +2,7 @@ import { cleanedFileName, objectHeaders } from "./audio";
 import { getJob, isExpired, publicJob } from "./db";
 import { json, readJson } from "./http";
 import { applyPredictionResult, syncReplicatePrediction } from "./replicate";
+import { getDailyJobUsage } from "./uploads";
 import type { AppEnv, JobRow, ReplicatePrediction, User } from "./types";
 
 export async function listJobs(env: AppEnv, user: User): Promise<Response> {
@@ -14,7 +15,8 @@ export async function listJobs(env: AppEnv, user: User): Promise<Response> {
 		.bind(user.id, new Date().toISOString())
 		.all<JobRow>();
 
-	return json({ jobs: results.map(publicJob) });
+	const quota = await getDailyJobUsage(env, user);
+	return json({ jobs: results.map(publicJob), quota });
 }
 
 export async function getJobStatus(jobId: string, env: AppEnv, user: User): Promise<Response> {

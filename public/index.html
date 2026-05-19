@@ -21,9 +21,15 @@
 				<span class="brand-mark" aria-hidden="true"></span>
 				<span>ClearMic</span>
 			</a>
-			<div class="account">
-				<span class="account-label" id="account-label">Guest</span>
-				<button class="link" id="logout" type="button" hidden>Sign out</button>
+			<div class="nav-right">
+				<div class="quota" id="quota" hidden aria-live="polite">
+					<span class="quota-num tabular" id="quota-num">10</span>
+					<span class="quota-label">left today</span>
+				</div>
+				<div class="account">
+					<span class="account-label" id="account-label">Guest</span>
+					<button class="link" id="logout" type="button" hidden>Sign out</button>
+				</div>
 			</div>
 		</nav>
 
@@ -38,6 +44,7 @@
 
 				<section class="step" data-step="file">
 					<h1>Upload audio</h1>
+					<p class="hint">Drop a recording and we'll clean up the noise.</p>
 
 					<div class="dropzone" id="dropzone">
 						<input id="audio" name="audio" type="file" accept="audio/*" aria-label="Audio file" />
@@ -86,6 +93,7 @@
 
 				<section class="step" data-step="options" hidden>
 					<h1>Options</h1>
+					<p class="hint">Pick how hard the engine works.</p>
 
 					<div class="opt-group">
 						<span class="opt-label">Strength</span>
@@ -127,6 +135,7 @@
 
 				<section class="step" data-step="auth" hidden>
 					<h1>Verify email</h1>
+					<p class="hint">We'll save your file to your account.</p>
 
 					<div class="field">
 						<input class="input" id="email" type="email" autocomplete="email" placeholder="you@example.com" />

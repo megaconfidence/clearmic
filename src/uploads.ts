@@ -6,9 +6,22 @@ import { createPresignedPutUrl } from "./r2";
 import type { AppEnv, UploadIntentRow, User } from "./types";
 
 const UPLOAD_URL_TTL_SECONDS = 15 * 60;
-const DAILY_JOB_LIMIT = 10;
+export const DAILY_JOB_LIMIT = 10;
 const UPLOAD_ID_METADATA_HEADER = "X-Amz-Meta-Clearmic-Upload-Id";
 const UPLOAD_SIZE_METADATA_HEADER = "X-Amz-Meta-Clearmic-Expected-Size";
+
+export async function getDailyJobUsage(env: AppEnv, user: User): Promise<{ used: number; limit: number }> {
+	const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+	const row = await env.DB.prepare(
+		`SELECT
+			(SELECT COUNT(*) FROM jobs WHERE user_id = ? AND created_at >= ?) +
+			(SELECT COUNT(*) FROM upload_intents WHERE user_id = ? AND created_at >= ?) AS count`,
+	)
+		.bind(user.id, since, user.id, since)
+		.first<{ count: number }>();
+
+	return { used: Math.min(row?.count ?? 0, DAILY_JOB_LIMIT), limit: DAILY_JOB_LIMIT };
+}
 
 type UploadRequest = {
 	fileName?: unknown;

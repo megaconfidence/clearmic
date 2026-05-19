@@ -50,10 +50,15 @@
 	--r-xl: 16px;
 
 	--ease: cubic-bezier(0.2, 0, 0, 1);
+	--ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+	--ease-spring: cubic-bezier(0.34, 1.32, 0.64, 1);
 
 	--shadow-card:
 		0 1px 2px rgba(15, 15, 15, 0.04),
 		0 4px 16px rgba(15, 15, 15, 0.04);
+	--shadow-card-hover:
+		0 1px 2px rgba(15, 15, 15, 0.05),
+		0 6px 24px rgba(15, 15, 15, 0.06);
 }
 
 html {
@@ -71,6 +76,16 @@ body {
 	font-weight: 400;
 	line-height: 1.5;
 	letter-spacing: -0.005em;
+	animation: pageIn 480ms var(--ease-out-expo) both;
+}
+
+@keyframes pageIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
 }
 
 ::selection {
@@ -139,6 +154,11 @@ button {
 	font-weight: 600;
 	letter-spacing: -0.01em;
 	color: var(--text);
+	transition: opacity 160ms var(--ease);
+}
+
+.brand:hover {
+	opacity: 0.7;
 }
 
 .brand-mark {
@@ -147,6 +167,70 @@ button {
 	border-radius: 999px;
 	background: var(--accent);
 	box-shadow: 0 0 0 3px var(--accent-soft);
+	animation: brandBreathe 3.2s ease-in-out infinite;
+}
+
+@keyframes brandBreathe {
+	0%,
+	100% {
+		box-shadow: 0 0 0 3px var(--accent-soft);
+	}
+	50% {
+		box-shadow: 0 0 0 5px var(--accent-soft);
+	}
+}
+
+.nav-right {
+	display: inline-flex;
+	align-items: center;
+	gap: 14px;
+}
+
+.quota {
+	display: inline-flex;
+	align-items: center;
+	gap: 5px;
+	padding: 5px 10px 5px 9px;
+	border-radius: 999px;
+	background: var(--accent-soft);
+	font-size: 12px;
+	font-weight: 500;
+	color: var(--accent);
+	transition-property: background-color, color, scale;
+	transition-duration: 220ms;
+	transition-timing-function: var(--ease);
+	animation: quotaIn 360ms var(--ease-out-expo) both;
+}
+
+@keyframes quotaIn {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
+.quota[data-state="low"] {
+	background: #fef3c7;
+	color: var(--amber);
+}
+
+.quota[data-state="empty"] {
+	background: var(--err-soft);
+	color: var(--err);
+}
+
+.quota-num {
+	font-variant-numeric: tabular-nums;
+	font-weight: 600;
+}
+
+.quota-label {
+	color: inherit;
+	opacity: 0.85;
 }
 
 .account {
@@ -235,13 +319,45 @@ main {
 	display: flex;
 	flex-direction: column;
 	gap: 18px;
-	animation: stepIn 280ms var(--ease) both;
+	animation: stepIn 420ms var(--ease-out-expo) both;
+}
+
+.step > * {
+	animation: stepChunkIn 460ms var(--ease-out-expo) both;
+}
+
+.step > *:nth-child(1) {
+	animation-delay: 40ms;
+}
+.step > *:nth-child(2) {
+	animation-delay: 90ms;
+}
+.step > *:nth-child(3) {
+	animation-delay: 150ms;
+}
+.step > *:nth-child(4) {
+	animation-delay: 210ms;
+}
+.step > *:nth-child(5) {
+	animation-delay: 270ms;
+}
+.step > *:nth-child(6) {
+	animation-delay: 330ms;
 }
 
 @keyframes stepIn {
 	from {
 		opacity: 0;
-		transform: translateY(4px);
+	}
+	to {
+		opacity: 1;
+	}
+}
+
+@keyframes stepChunkIn {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
 	}
 	to {
 		opacity: 1;
@@ -447,6 +563,21 @@ a.primary {
 	cursor: default;
 }
 
+.dropzone.has-file .file-tag {
+	animation: tagIn 360ms var(--ease-out-expo) both;
+}
+
+@keyframes tagIn {
+	from {
+		opacity: 0;
+		transform: translateY(-4px) scale(0.985);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+
 .dropzone.has-file:hover {
 	background: var(--surface);
 	border-color: var(--border);
@@ -537,9 +668,13 @@ a.primary {
 	font-weight: 500;
 	color: var(--text);
 	min-height: 38px;
-	transition-property: background-color, color, box-shadow, scale;
-	transition-duration: 160ms;
+	transition-property: background-color, color, box-shadow, scale, transform;
+	transition-duration: 180ms;
 	transition-timing-function: var(--ease);
+}
+
+.opt-card:has(input:checked) {
+	transform: translateY(-1px);
 }
 
 .opt-card:hover {
@@ -625,7 +760,7 @@ a.primary {
 	display: flex;
 	flex-direction: column;
 	gap: 14px;
-	animation: stepIn 220ms var(--ease) both;
+	animation: resultIn 380ms var(--ease-out-expo) both;
 }
 
 .code-cells {
@@ -679,6 +814,22 @@ a.primary {
 		0 0 0 3px var(--accent-ring);
 }
 
+.code-cell.just-filled {
+	animation: cellPop 320ms var(--ease-spring) both;
+}
+
+@keyframes cellPop {
+	0% {
+		transform: scale(1);
+	}
+	40% {
+		transform: scale(1.07);
+	}
+	100% {
+		transform: scale(1);
+	}
+}
+
 /* ===== processing ===== */
 
 .proc-meta {
@@ -730,6 +881,9 @@ a.primary {
 	text-transform: capitalize;
 	background: var(--surface-3);
 	color: var(--text-2);
+	transition-property: background-color, color;
+	transition-duration: 320ms;
+	transition-timing-function: var(--ease);
 }
 
 .status-badge::before {
@@ -780,7 +934,18 @@ a.primary {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
-	animation: stepIn 220ms var(--ease) both;
+	animation: resultIn 460ms var(--ease-out-expo) both;
+}
+
+@keyframes resultIn {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
 }
 
 .player {
@@ -849,10 +1014,23 @@ a.primary {
 	margin: 0 -4px;
 	padding-left: 8px;
 	padding-right: 8px;
+	animation: rowIn 460ms var(--ease-out-expo) both;
+	animation-delay: calc(var(--i, 0) * 55ms);
 }
 
 .job-card:hover {
 	background: var(--surface-2);
+}
+
+@keyframes rowIn {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
 }
 
 .job-card-main {
@@ -908,9 +1086,23 @@ a.primary {
 
 /* ===== responsive ===== */
 
+@media (max-width: 600px) {
+	.quota-label {
+		display: none;
+	}
+
+	.quota {
+		padding: 5px 8px;
+	}
+}
+
 @media (max-width: 480px) {
 	.nav {
 		padding: 16px 20px;
+	}
+
+	.nav-right {
+		gap: 8px;
 	}
 
 	main {
@@ -928,7 +1120,7 @@ a.primary {
 	}
 
 	.account-label {
-		max-width: 140px;
+		max-width: 120px;
 		font-size: 12px;
 	}
 }

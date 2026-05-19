@@ -32,6 +32,8 @@ const fields = {
 	fileSize: document.getElementById("file-size"),
 	fileType: document.getElementById("file-type"),
 	fileClear: document.getElementById("file-clear"),
+	quota: document.getElementById("quota"),
+	quotaNum: document.getElementById("quota-num"),
 };
 
 let currentUser = null;
@@ -120,7 +122,13 @@ fields.codeCells.forEach((cell, idx) => {
 	cell.addEventListener("input", () => {
 		const digit = cell.value.replace(/\D/g, "").slice(-1);
 		cell.value = digit;
+		const wasFilled = cell.classList.contains("is-filled");
 		cell.classList.toggle("is-filled", Boolean(digit));
+		if (digit && !wasFilled) {
+			cell.classList.remove("just-filled");
+			void cell.offsetWidth;
+			cell.classList.add("just-filled");
+		}
 		syncHiddenCode();
 		if (digit) {
 			const next = fields.codeCells[idx + 1];
@@ -180,15 +188,18 @@ async function loadMe() {
 	const payload = await api("/api/me");
 	currentUser = payload.user;
 	renderAccount();
+	renderQuota(payload.quota);
 }
 
 async function loadJobs() {
 	if (!currentUser) {
 		renderJobList([]);
+		renderQuota(null);
 		return;
 	}
 	const payload = await api("/api/jobs");
 	renderJobList(payload.jobs || []);
+	renderQuota(payload.quota);
 }
 
 // ============ auth ============
@@ -413,14 +424,15 @@ function renderJobList(jobs) {
 		return;
 	}
 
-	fields.jobList.append(...jobs.map(createJobCard));
+	fields.jobList.append(...jobs.map((job, index) => createJobCard(job, index)));
 }
 
-function createJobCard(job) {
+function createJobCard(job, index = 0) {
 	const status = String(job.status || "pending").toLowerCase();
 	const card = document.createElement("article");
 	card.className = "job-card";
 	card.dataset.state = status;
+	card.style.setProperty("--i", String(index));
 
 	const main = document.createElement("div");
 	main.className = "job-card-main";
@@ -467,6 +479,17 @@ function createJobCard(job) {
 function renderAccount() {
 	fields.accountLabel.textContent = currentUser ? currentUser.email : "Guest";
 	fields.logout.hidden = !currentUser;
+}
+
+function renderQuota(quota) {
+	if (!quota || !currentUser) {
+		fields.quota.hidden = true;
+		return;
+	}
+	const remaining = Math.max(0, quota.limit - quota.used);
+	fields.quota.hidden = false;
+	fields.quotaNum.textContent = remaining;
+	fields.quota.dataset.state = remaining === 0 ? "empty" : remaining <= 2 ? "low" : "ok";
 }
 
 // ============ step ============
