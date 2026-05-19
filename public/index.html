@@ -3,18 +3,84 @@
 	<head>
 		<meta charset="UTF-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-		<title>Hello, World!</title>
+		<title>ClearMic</title>
+		<link rel="stylesheet" href="/styles.css" />
 	</head>
 	<body>
-		<h1 id="heading"></h1>
-		<p>This page comes from a static asset stored at `public/index.html` as configured in `wrangler.jsonc`.</p>
-		<script>
-			fetch('/message')
-				.then((resp) => resp.text())
-				.then((text) => {
-					const h1 = document.getElementById('heading');
-					h1.textContent = text;
-				});
-		</script>
+		<main>
+			<section class="hero" aria-label="ClearMic audio cleanup">
+				<div class="copy">
+					<div class="eyebrow"><span class="pulse"></span> Worker + R2 + D1 + Replicate</div>
+					<h1>Noise out. Voice forward.</h1>
+					<p class="lede">
+						Upload a rough voice recording and ClearMic stores it in R2, tracks the job in D1, sends it to Replicate, then saves the cleaned WAV back to R2.
+					</p>
+					<div class="meter" aria-hidden="true"></div>
+				</div>
+
+				<div class="console">
+					<form class="panel" id="upload-form">
+						<label for="audio">Audio source</label>
+						<div class="dropzone">
+							<input id="audio" name="audio" type="file" accept="audio/*" required />
+						</div>
+
+						<div class="controls">
+							<fieldset class="choice-group">
+								<legend>Cleanup strength</legend>
+								<div class="choice-grid triple">
+									<label class="choice-card">
+										<input type="radio" name="preset" value="light" />
+										<span class="choice-title">Light</span>
+										<span class="choice-copy">Gentler pass for already decent room audio.</span>
+									</label>
+									<label class="choice-card">
+										<input type="radio" name="preset" value="balanced" checked />
+										<span class="choice-title">Balanced</span>
+										<span class="choice-copy">Default cleanup with a natural voice finish.</span>
+									</label>
+									<label class="choice-card">
+										<input type="radio" name="preset" value="aggressive" />
+										<span class="choice-title">Aggressive</span>
+										<span class="choice-copy">Harder denoise for fans, street bleed, and hum.</span>
+									</label>
+								</div>
+							</fieldset>
+
+							<fieldset class="choice-group">
+								<legend>Output file</legend>
+								<div class="choice-grid double">
+									<label class="choice-card">
+										<input type="radio" name="output_choice" value="enhanced" checked />
+										<span class="choice-title">Enhanced</span>
+										<span class="choice-copy">Polished voice with denoise plus enhancement.</span>
+									</label>
+									<label class="choice-card">
+										<input type="radio" name="output_choice" value="denoised" />
+										<span class="choice-title">Denoised</span>
+										<span class="choice-copy">Cleaner source with less enhancement color.</span>
+									</label>
+								</div>
+							</fieldset>
+						</div>
+
+						<button id="submit" type="submit">Clean this recording</button>
+
+						<div class="status" id="status" hidden>
+							<div class="row"><span>Status</span><strong id="job-status">-</strong></div>
+							<div class="row"><span>File</span><strong id="job-file">-</strong></div>
+							<div class="row"><span>Preset</span><strong id="job-preset">-</strong></div>
+							<div class="row"><span>Output</span><strong id="job-output">-</strong></div>
+							<p class="error" id="error" hidden></p>
+							<div id="result" hidden>
+								<audio id="player" controls></audio>
+								<a class="download" id="download">Download cleaned WAV</a>
+							</div>
+						</div>
+					</form>
+				</div>
+			</section>
+		</main>
+		<script src="/app.js"></script>
 	</body>
 </html>
