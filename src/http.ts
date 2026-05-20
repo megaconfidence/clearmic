@@ -1,5 +1,3 @@
-import type { AppEnv } from "./types";
-
 const DEFAULT_JSON_BODY_LIMIT_BYTES = 16 * 1024;
 
 export class HttpError extends Error {
@@ -68,26 +66,17 @@ export function getPublicBaseUrl(request: Request): string | null {
 	return isPublicHttpsUrl(origin) ? origin : null;
 }
 
-export function rejectDisallowedOrigin(request: Request, env: AppEnv): Response | null {
+export function rejectDisallowedOrigin(request: Request): Response | null {
 	const origin = request.headers.get("origin");
 	if (!origin) {
 		return null;
 	}
 
-	if (origin === new URL(request.url).origin || getAllowedOrigins(env).has(origin)) {
+	if (origin === new URL(request.url).origin) {
 		return null;
 	}
 
 	return json({ error: "Origin is not allowed." }, 403);
-}
-
-export function getAllowedOrigins(env: AppEnv): Set<string> {
-	return new Set(
-		(env.APP_ORIGINS ?? "")
-			.split(",")
-			.map((origin) => origin.trim().replace(/\/+$/, ""))
-			.filter(Boolean),
-	);
 }
 
 async function readLimitedText(body: ReadableStream<Uint8Array> | null, maxBytes: number): Promise<{ text: string; truncated: boolean }> {

@@ -42,7 +42,7 @@ export async function createUpload(request: Request, env: AppEnv, user: User): P
 		return json({ error: "Missing REPLICATE_API_TOKEN secret." }, 500);
 	}
 
-	const originResponse = rejectDisallowedOrigin(request, env);
+	const originResponse = rejectDisallowedOrigin(request);
 	if (originResponse) {
 		return originResponse;
 	}
@@ -119,7 +119,7 @@ export async function createUpload(request: Request, env: AppEnv, user: User): P
 }
 
 export async function completeUpload(uploadId: string, request: Request, env: AppEnv, user: User): Promise<Response> {
-	const originResponse = rejectDisallowedOrigin(request, env);
+	const originResponse = rejectDisallowedOrigin(request);
 	if (originResponse) {
 		return originResponse;
 	}

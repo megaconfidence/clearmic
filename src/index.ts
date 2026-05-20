@@ -1,3 +1,4 @@
+import { cleanupExpiredData } from "./cleanup";
 import { getCurrentUser, getMe, logout, requestOtp, unauthorized, verifyOtp } from "./auth";
 import { markJobFailed } from "./db";
 import { HttpError, getErrorMessage, json } from "./http";
@@ -32,7 +33,16 @@ export default {
 			}
 		}
 	},
+
+	async scheduled(_controller: ScheduledController, env: AppEnv, ctx: ExecutionContext): Promise<void> {
+		ctx.waitUntil(runScheduledCleanup(env));
+	},
 } satisfies ExportedHandler<AppEnv, ProcessJobMessage>;
+
+async function runScheduledCleanup(env: AppEnv): Promise<void> {
+	const result = await cleanupExpiredData(env);
+	console.log("Expired data cleanup completed", result);
+}
 
 async function routeRequest(request: Request, env: AppEnv): Promise<Response> {
 	const url = new URL(request.url);

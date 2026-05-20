@@ -7,9 +7,6 @@
 	"assets": {
 		"directory": "./public"
 	},
-	"vars": {
-		"APP_ORIGINS": "https://clearmic.conflare.workers.dev,https://clearmic.conflare.dev"
-	},
 	"send_email": [
 		{
 			"name": "EMAIL",
@@ -45,6 +42,9 @@
 				"max_retries": 3
 			}
 		]
+	},
+	"triggers": {
+		"crons": ["*/15 * * * *"]
 	},
 	"secrets": {
 		"required": [

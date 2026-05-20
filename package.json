@@ -8,6 +8,7 @@
     "dev:tunnel": "wrangler dev --tunnel",
     "start": "wrangler dev",
     "typecheck": "tsc --noEmit",
+    "r2:cors": "bash r2-cors.sh && wrangler r2 bucket cors set clearmic-audio --file r2-cors.json --force",
     "db:migrate:local": "wrangler d1 migrations apply clearmic-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply clearmic-db --remote",
     "cf-typegen": "wrangler types"

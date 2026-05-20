@@ -162,7 +162,7 @@ npx wrangler r2 bucket create clearmic-audio
 npx wrangler queues create clearmic-audio-jobs
 npx wrangler d1 create clearmic-db
 npx wrangler r2 bucket lifecycle add clearmic-audio delete-after-1-day --expire-days 1
-npx wrangler r2 bucket cors set clearmic-audio --file r2-cors.json
+npm run r2:cors
 ```
 
 Paste the `database_id` from `wrangler d1 create` into `wrangler.jsonc`.
@@ -181,7 +181,7 @@ npx wrangler secret put R2_SECRET_ACCESS_KEY
 
 - `EMAIL_FROM` must be a verified sender on a Cloudflare Email Service domain
 - `R2_*` should be scoped to the `clearmic-audio` bucket with object read/write
-- `APP_ORIGINS` in `wrangler.jsonc` must match the origins in `r2-cors.json`
+- `R2_CORS_ORIGINS` in `.env` must include every deployed frontend origin that uploads directly to R2
 
 Migrate D1 and deploy:
 
@@ -203,7 +203,7 @@ npm run deploy
 - Upload URLs sign exact `Content-Type`, `Content-Length`, and ClearMic metadata; `/complete` re-verifies the stored object
 - Per-job random tokens guard Replicate input, webhook, and download routes
 - R2 lifecycle hard-deletes after 1 day; D1 `expires_at` blocks access at exactly 24h
-- R2 CORS and app origins pinned via `APP_ORIGINS`
+- R2 CORS pins browser upload origins
 - OTPs: 10 min TTL, single-use, locked after 5 wrong attempts
 
 </details>
