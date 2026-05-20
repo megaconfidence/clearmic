@@ -3,6 +3,7 @@ import { json, readJson } from "./http";
 import { randomToken } from "./audio";
 import { validateTurnstile } from "./turnstile";
 import { getDailyJobUsage } from "./uploads";
+import { EMAIL_FONTS, emailOriginFromRequest, renderEmailShell } from "./email-template";
 import type { AppEnv, OtpCodeRow, User } from "./types";
 
 const SESSION_COOKIE = "cm_session";
@@ -44,7 +45,7 @@ export async function requestOtp(request: Request, env: AppEnv): Promise<Respons
 			`Your login code: ${code}\n\n` +
 			`Expires in 10 minutes. Can only be used once. Locks after 5 wrong attempts.\n\n` +
 			`If you didn't request this, you can ignore this email.`,
-		html: renderOtpEmailHtml(code),
+		html: renderOtpEmailHtml(code, emailOriginFromRequest(request)),
 	});
 
 	return json({ ok: true });
@@ -174,46 +175,24 @@ async function hashSecret(value: string): Promise<string> {
 	return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-function renderOtpEmailHtml(code: string): string {
-	const sans = "-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',Roboto,Helvetica,Arial,sans-serif";
-	const mono = "'JetBrains Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace";
-
-	return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light only">
-<meta name="supported-color-schemes" content="light">
-<title>Your ClearMic login code</title>
-</head>
-<body style="margin:0;padding:0;background:#fafaf9;font-family:${sans};color:#0a0a0a;-webkit-font-smoothing:antialiased;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#fafaf9;padding:48px 16px;">
-<tr><td align="center">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:440px;background:#ffffff;border:1px solid #ececeb;border-radius:16px;">
-<tr><td style="padding:28px 28px 0;">
-<table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
-<td style="vertical-align:middle;padding-right:9px;line-height:0;font-size:0;">
-<span style="display:inline-block;width:9px;height:9px;border-radius:999px;background:#373cff;"></span>
-</td>
-<td style="vertical-align:middle;font-family:${sans};font-size:14px;font-weight:600;letter-spacing:-0.01em;color:#0a0a0a;">ClearMic</td>
-</tr></table>
-</td></tr>
-<tr><td style="padding:24px 28px 4px;">
+function renderOtpEmailHtml(code: string, origin: string): string {
+	const { sans, mono } = EMAIL_FONTS;
+	const body = `<tr><td style="padding:24px 28px 4px;">
 <h1 style="font-family:${sans};font-size:19px;font-weight:600;letter-spacing:-0.015em;color:#0a0a0a;margin:0 0 6px;">Your login code</h1>
 <p style="font-family:${sans};font-size:13px;color:#525252;line-height:1.5;margin:0;">Use this code to sign in to ClearMic.</p>
 </td></tr>
-<tr><td style="padding:16px 28px 0;">
+<tr><td style="padding:14px 28px 0;">
 <div style="background:#eef0ff;border-radius:12px;padding:22px;text-align:center;font-family:${mono};font-size:30px;font-weight:600;letter-spacing:0.32em;color:#373cff;">${code}</div>
 </td></tr>
 <tr><td style="padding:20px 28px 28px;">
 <p style="font-family:${sans};font-size:13px;color:#525252;line-height:1.55;margin:0;">Expires in <strong style="color:#0a0a0a;font-weight:600;">10 minutes</strong>, can only be used once, and locks after 5 wrong attempts.</p>
 <p style="font-family:${sans};font-size:12px;color:#a3a3a3;line-height:1.5;margin:12px 0 0;">If you didn't request this, you can ignore this email.</p>
-</td></tr>
-</table>
-<p style="font-family:${sans};font-size:11px;color:#a3a3a3;margin:20px 0 0;text-align:center;">ClearMic · Voice cleanup</p>
-</td></tr>
-</table>
-</body>
-</html>`;
+</td></tr>`;
+
+	return renderEmailShell({
+		origin: origin || null,
+		title: "Your ClearMic login code",
+		preheader: `Your ClearMic code is ${code}. Expires in 10 minutes.`,
+		body,
+	});
 }

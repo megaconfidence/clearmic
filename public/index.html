@@ -96,35 +96,32 @@
 				</section>
 
 				<section class="step" data-step="options" hidden>
-					<h1>Build a chain</h1>
-					<p class="hint">Choose at least one step. Selected steps run from top to bottom.</p>
+					<h1>Clean it up</h1>
+					<p class="hint">Pick one or more. We'll apply them in order, top to bottom.</p>
 
 					<div class="pipeline">
 						<article class="pipeline-option">
 							<label class="pipeline-toggle">
 								<input id="noise-removal" type="checkbox" name="noise_removal" />
-								<span class="step-index">1</span>
-								<span class="pipeline-copy">
+								<span class="pipeline-text">
 									<strong>Noise removal</strong>
-									<span>playmore/speech-enhancer</span>
+									<span class="hint">Removes background hum, hiss, and street bleed.</span>
 								</span>
 							</label>
-							<p class="hint">Reduces room noise, hiss, hum, and street bleed first.</p>
 						</article>
 
 						<article class="pipeline-option">
 							<label class="pipeline-toggle">
 								<input id="enhance" type="checkbox" name="enhance" />
-								<span class="step-index">2</span>
-								<span class="pipeline-copy">
+								<span class="pipeline-text">
 									<strong>Enhancement</strong>
-									<span>resemble-ai/resemble-enhance</span>
+									<span class="hint">Brightens dull recordings and adds voice detail.</span>
 								</span>
 							</label>
 
 							<div class="knob-panel" id="enhancement-controls" hidden>
 								<div class="opt-group">
-									<span class="opt-label">Enhancement strength</span>
+									<span class="opt-label">Strength</span>
 									<div class="opt-row compact">
 										<label class="opt-card">
 											<input type="radio" name="enhancement_preset" value="low" />
@@ -140,30 +137,29 @@
 										</label>
 									</div>
 								</div>
-								<p class="hint">Uses Midpoint solver and 0.5 prior temperature. Strength only changes enhancement passes.</p>
 							</div>
 						</article>
 
 						<article class="pipeline-option">
 							<label class="pipeline-toggle">
 								<input id="transcribe" type="checkbox" name="transcribe" />
-								<span class="step-index">3</span>
-								<span class="pipeline-copy">
+								<span class="pipeline-text">
 									<strong>Transcription</strong>
-									<span>vaibhavs10/incredibly-fast-whisper</span>
+									<span class="hint">Writes out what was said and lets you download the text.</span>
 								</span>
 							</label>
-							<p class="hint">Creates a transcript from the latest audio in the chain.</p>
 						</article>
 					</div>
 
 					<div class="opt-group">
 						<span class="opt-label">Delivery</span>
-						<label class="opt-card">
+						<label class="check-row">
 							<input id="email-on-completion" type="checkbox" name="email_on_completion" />
-							<span>Email me download links when it is done</span>
+							<span class="check-row-copy">
+								<strong>Email me when it's done</strong>
+								<span>Sends 24-hour download links to your inbox.</span>
+							</span>
 						</label>
-						<p class="hint">Links expire with the job after 24 hours.</p>
 					</div>
 
 					<div class="actions">
@@ -199,7 +195,10 @@
 								<input class="code-cell" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 5" />
 								<input class="code-cell" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 6" />
 							</div>
-							<p class="hint">Check your inbox. Code expires in 10 minutes.</p>
+							<div class="code-meta">
+								<p class="hint">Check your inbox. Code expires in 10 minutes.</p>
+								<button class="resend-link" id="resend-code" type="button">Resend</button>
+							</div>
 						</div>
 						<button class="primary block" id="verify-code" type="button">Verify and upload</button>
 					</div>
@@ -229,13 +228,29 @@
 					</div>
 
 					<div class="result" id="result" hidden>
-						<audio class="player" id="player" controls preload="metadata"></audio>
+						<audio class="player" id="player" controls preload="metadata" hidden></audio>
+
 						<div class="transcript" id="transcript" hidden>
-							<span class="opt-label">Transcript</span>
+							<div class="transcript-head">
+								<svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+									<path d="M5 6h14M5 10h14M5 14h10M5 18h7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+								</svg>
+								<span class="opt-label">Transcript preview</span>
+							</div>
 							<p id="transcript-text"></p>
+							<p class="hint" id="transcript-more" hidden>Download the transcript below for the full text.</p>
 						</div>
-						<a class="ghost block" id="transcript-download" download="clearmic-transcript.txt" hidden>Download transcript</a>
-						<a class="primary block" id="download" download="clearmic-cleaned.wav">Download</a>
+
+						<div class="result-actions">
+							<a class="primary block" id="download" download="clearmic-cleaned.wav" hidden>
+								<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" width="14" height="14"><path d="M12 4v12m0 0l-4-4m4 4l4-4M5 20h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+								Download audio
+							</a>
+							<a class="ghost block" id="transcript-download" download="clearmic-transcript.txt" hidden>
+								<svg viewBox="0 0 24 24" fill="none" aria-hidden="true" width="14" height="14"><path d="M12 4v12m0 0l-4-4m4 4l4-4M5 20h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>
+								Download transcript
+							</a>
+						</div>
 					</div>
 
 					<div class="actions">

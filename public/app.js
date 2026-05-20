@@ -31,6 +31,7 @@ const fields = {
 	transcribe: document.getElementById("transcribe"),
 	transcript: document.getElementById("transcript"),
 	transcriptText: document.getElementById("transcript-text"),
+	transcriptMore: document.getElementById("transcript-more"),
 	transcriptDownload: document.getElementById("transcript-download"),
 	download: document.getElementById("download"),
 	library: document.getElementById("library"),
@@ -50,6 +51,8 @@ const fields = {
 	authSub: document.getElementById("auth-sub"),
 	authBack: document.querySelector('[data-step="auth"] [data-back]'),
 	verifyCode: document.getElementById("verify-code"),
+	sendCode: document.getElementById("send-code"),
+	resendCode: document.getElementById("resend-code"),
 };
 
 let currentUser = null;
@@ -62,7 +65,10 @@ let turnstileWidgetId;
 
 // ============ wiring ============
 
-document.getElementById("file-next").addEventListener("click", () => {
+const fileNext = document.getElementById("file-next");
+const optionsNext = document.getElementById("options-next");
+
+fileNext.addEventListener("click", () => {
 	showError("");
 	if (!fields.audio.files[0]) {
 		showError("Choose an audio file first.");
@@ -71,7 +77,7 @@ document.getElementById("file-next").addEventListener("click", () => {
 	showStep("options");
 });
 
-document.getElementById("options-next").addEventListener("click", () => {
+optionsNext.addEventListener("click", () => {
 	showError("");
 	if (!hasSelectedProcessingStep()) {
 		showError("Select at least one processing step.");
@@ -84,7 +90,20 @@ document.getElementById("options-next").addEventListener("click", () => {
 	showStep("auth");
 });
 
-document.getElementById("send-code").addEventListener("click", requestOtp);
+function updateFileNextEnabled() {
+	fileNext.disabled = !fields.audio.files[0];
+}
+
+function updateOptionsNextEnabled() {
+	optionsNext.disabled = !hasSelectedProcessingStep();
+}
+
+document.querySelectorAll('[name="noise_removal"], [name="enhance"], [name="transcribe"]').forEach((input) => {
+	input.addEventListener("change", updateOptionsNextEnabled);
+});
+
+fields.sendCode.addEventListener("click", () => requestOtp());
+fields.resendCode.addEventListener("click", () => requestOtp({ resend: true }));
 fields.verifyCode.addEventListener("click", verifyAndContinue);
 document.getElementById("new-file").addEventListener("click", resetFlow);
 fields.logout.addEventListener("click", logout);
@@ -93,6 +112,8 @@ fields.signIn.addEventListener("click", () => {
 	showStep("auth");
 	requestAnimationFrame(() => fields.email.focus());
 });
+
+
 
 fields.enhance.addEventListener("change", renderEnhancementControls);
 document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -139,6 +160,7 @@ fields.audio.addEventListener("change", () => {
 	} else {
 		clearFileSelection();
 	}
+	updateFileNextEnabled();
 });
 
 fields.fileClear.addEventListener("click", (e) => {
@@ -211,6 +233,8 @@ async function init() {
 	await initTurnstile();
 	await loadJobs();
 	renderEnhancementControls();
+	updateFileNextEnabled();
+	updateOptionsNextEnabled();
 	showStep("file");
 }
 
@@ -236,7 +260,7 @@ async function loadJobs() {
 
 // ============ auth ============
 
-async function requestOtp() {
+async function requestOtp({ resend = false } = {}) {
 	showError("");
 	if (!turnstileToken) {
 		showError("Complete the verification challenge before requesting a code.");
@@ -251,14 +275,27 @@ async function requestOtp() {
 		});
 		resetTurnstile();
 		fields.codeBlock.hidden = false;
+		fields.sendCode.hidden = true;
 		clearCodeCells();
 		fields.codeCells[0]?.focus();
+		if (resend) {
+			flashResend();
+		}
 	} catch (error) {
 		resetTurnstile();
 		showError(error.message || String(error));
 	} finally {
 		setBusy(false);
 	}
+}
+
+function flashResend() {
+	fields.resendCode.textContent = "Sent";
+	fields.resendCode.disabled = true;
+	setTimeout(() => {
+		fields.resendCode.textContent = "Resend";
+		fields.resendCode.disabled = false;
+	}, 2500);
 }
 
 async function verifyAndContinue() {
@@ -277,6 +314,7 @@ async function verifyAndContinue() {
 		} else {
 			await loadJobs();
 			fields.codeBlock.hidden = true;
+			fields.sendCode.hidden = false;
 			clearCodeCells();
 			showStep("file");
 			setBusy(false);
@@ -291,9 +329,32 @@ async function logout() {
 	stopJobPolling();
 	await api("/api/logout", { method: "POST" });
 	currentUser = null;
-	renderAccount();
-	renderJobList([]);
+	lastJobListRefreshAt = 0;
+	fields.email.value = "";
+	// Order matters: resetFlow() ends with setBusy(false), which force-enables
+	// every <button>. Anything that touches button.disabled (clearOptionsForm,
+	// updateFileNextEnabled) has to run after resetFlow or it gets clobbered.
 	resetFlow();
+	clearOptionsForm();
+	updateFileNextEnabled();
+	renderAccount();
+	renderQuota(null);
+	renderJobList([]);
+	resetTurnstile();
+}
+
+function clearOptionsForm() {
+	// Reset processing pipeline selections so the next signed-in user starts fresh.
+	// Kept out of resetFlow() because "Process another file" should preserve the
+	// user's previous choices.
+	fields.noiseRemoval.checked = false;
+	fields.enhance.checked = false;
+	fields.transcribe.checked = false;
+	fields.emailOnCompletion.checked = false;
+	const defaultPreset = document.querySelector('input[name="enhancement_preset"][value="medium"]');
+	if (defaultPreset) defaultPreset.checked = true;
+	fields.enhancementControls.hidden = true;
+	updateOptionsNextEnabled();
 }
 
 // ============ upload ============
@@ -439,26 +500,35 @@ async function initTurnstile() {
 			theme: "light",
 			callback(token) {
 				turnstileToken = token;
-				fields.turnstileStatus.textContent = "Verification ready.";
+				setTurnstileStatus("Verification ready.", "ready");
 			},
 			"expired-callback"() {
 				turnstileToken = "";
-				fields.turnstileStatus.textContent = "Verification expired. Complete it again.";
+				setTurnstileStatus("Verification expired. Complete it again.", "error");
 			},
 			"timeout-callback"() {
 				turnstileToken = "";
-				fields.turnstileStatus.textContent = "Verification timed out. Complete it again.";
+				setTurnstileStatus("Verification timed out. Complete it again.", "error");
 			},
 			"error-callback"() {
 				turnstileToken = "";
-				fields.turnstileStatus.textContent = "Verification error. Refresh or try again.";
+				setTurnstileStatus("Verification error. Refresh or try again.", "error");
 				return true;
 			},
 		});
-		fields.turnstileStatus.textContent = "Complete verification to request a code.";
+		setTurnstileStatus("Complete verification to request a code.", "idle");
 	} catch (error) {
-		fields.turnstileStatus.textContent = "Verification unavailable.";
+		setTurnstileStatus("Verification unavailable.", "error");
 		showError(error.message || String(error));
+	}
+}
+
+function setTurnstileStatus(message, state) {
+	fields.turnstileStatus.textContent = message;
+	if (state && state !== "idle") {
+		fields.turnstileStatus.dataset.state = state;
+	} else {
+		delete fields.turnstileStatus.dataset.state;
 	}
 }
 
@@ -483,7 +553,7 @@ function resetTurnstile() {
 	turnstileToken = "";
 	if (window.turnstile && turnstileWidgetId !== undefined) {
 		window.turnstile.reset(turnstileWidgetId);
-		fields.turnstileStatus.textContent = "Complete verification to request a code.";
+		setTurnstileStatus("Complete verification to request a code.", "idle");
 	}
 }
 
@@ -506,7 +576,9 @@ function renderJob(job) {
 		fields.result.hidden = false;
 		fields.player.hidden = !job.downloadUrl;
 		if (job.downloadUrl) {
-			fields.player.src = job.downloadUrl;
+			if (fields.player.src !== job.downloadUrl) {
+				fields.player.src = job.downloadUrl;
+			}
 		} else {
 			fields.player.removeAttribute("src");
 		}
@@ -525,6 +597,10 @@ function renderJob(job) {
 		} else {
 			fields.download.removeAttribute("href");
 		}
+		// Promote the transcript link to primary styling when it's the only download.
+		const transcriptIsPrimary = Boolean(job.transcriptUrl) && !job.downloadUrl;
+		fields.transcriptDownload.classList.toggle("primary", transcriptIsPrimary);
+		fields.transcriptDownload.classList.toggle("ghost", !transcriptIsPrimary);
 	} else {
 		fields.result.hidden = true;
 		fields.player.hidden = true;
@@ -569,35 +645,48 @@ function createJobCard(job, index = 0) {
 	const main = document.createElement("div");
 	main.className = "job-card-main";
 
+	const titleRow = document.createElement("div");
+	titleRow.className = "job-card-title-row";
+
 	const title = document.createElement("div");
 	title.className = "job-card-title";
 	title.textContent = job.inputName;
 	title.title = job.inputName;
-	main.append(title);
-
-	const meta = document.createElement("div");
-	meta.className = "job-card-meta";
-	for (const label of pipelineLabels(job)) {
-		const step = document.createElement("span");
-		step.textContent = label;
-		meta.append(step);
-
-		const stepSep = document.createElement("span");
-		stepSep.className = "dot-sep";
-		stepSep.textContent = "·";
-		meta.append(stepSep);
-	}
+	titleRow.append(title);
 
 	const badge = document.createElement("span");
 	badge.className = "status-badge";
 	badge.dataset.state = status;
 	badge.textContent = status;
-	meta.append(badge);
+	titleRow.append(badge);
 
-	const dotSep = document.createElement("span");
-	dotSep.className = "dot-sep";
-	dotSep.textContent = "·";
-	meta.append(dotSep);
+	main.append(titleRow);
+
+	const meta = document.createElement("div");
+	meta.className = "job-card-meta";
+
+	const labels = pipelineLabels(job);
+	if (labels.length) {
+		const pipeline = document.createElement("span");
+		pipeline.className = "job-card-pipeline";
+		labels.forEach((label, i) => {
+			if (i > 0) {
+				const sep = document.createElement("span");
+				sep.className = "dot-sep";
+				sep.textContent = "→";
+				pipeline.append(sep);
+			}
+			const step = document.createElement("span");
+			step.textContent = label;
+			pipeline.append(step);
+		});
+		meta.append(pipeline);
+
+		const sep = document.createElement("span");
+		sep.className = "dot-sep";
+		sep.textContent = "·";
+		meta.append(sep);
+	}
 
 	const expiry = document.createElement("span");
 	expiry.textContent = `${timeRemaining(job.expiresAt)} left`;
@@ -661,7 +750,32 @@ function renderQuota(quota) {
 
 function renderTranscript(transcript) {
 	fields.transcript.hidden = !transcript;
-	fields.transcriptText.textContent = transcript;
+	if (!transcript) {
+		fields.transcriptText.textContent = "";
+		fields.transcriptMore.hidden = true;
+		return;
+	}
+	const { preview, truncated } = previewTranscript(transcript, 3);
+	fields.transcriptText.textContent = preview;
+	fields.transcriptMore.hidden = !truncated;
+}
+
+function previewTranscript(text, maxSentences) {
+	const trimmed = String(text).trim();
+	if (!trimmed) {
+		return { preview: "", truncated: false };
+	}
+	// Greedy match: non-terminator chars, followed by one or more terminators (.!?…) then whitespace or end.
+	const matches = trimmed.match(/[^.!?…]+[.!?…]+(?:["'”’)]+)?(?=\s|$)/g);
+	if (!matches || matches.length <= maxSentences) {
+		return { preview: trimmed, truncated: false };
+	}
+	const preview = matches
+		.slice(0, maxSentences)
+		.join(" ")
+		.replace(/\s+/g, " ")
+		.trim();
+	return { preview: `${preview} …`, truncated: true };
 }
 
 function renderEnhancementControls() {
@@ -751,8 +865,10 @@ function resetFlow() {
 	clearFileSelection();
 	clearCodeCells();
 	fields.codeBlock.hidden = true;
+	fields.sendCode.hidden = false;
 	fields.result.hidden = true;
 	fields.player.hidden = true;
+	fields.player.removeAttribute("src");
 	fields.transcriptDownload.hidden = true;
 	fields.download.hidden = true;
 	renderTranscript("");
@@ -847,3 +963,5 @@ function labelForType(mime, name) {
 		?.toUpperCase();
 	return ext || "audio";
 }
+
+

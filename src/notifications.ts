@@ -1,5 +1,5 @@
-import { cleanedFileName, transcriptFileName } from "./audio";
 import { getUser, isExpired } from "./db";
+import { EMAIL_FONTS, renderEmailButton, renderEmailShell } from "./email-template";
 import type { AppEnv, JobRow } from "./types";
 
 export async function maybeSendCompletionEmail(job: JobRow, env: AppEnv, baseUrl?: string): Promise<void> {
@@ -40,8 +40,8 @@ export async function maybeSendCompletionEmail(job: JobRow, env: AppEnv, baseUrl
 				to: user.email,
 				from: env.EMAIL_FROM,
 				subject: "Your ClearMic file is ready",
-				text: renderCompletionEmailText(job, links),
-				html: renderCompletionEmailHtml(job, links),
+				text: renderCompletionEmailText(links),
+				html: renderCompletionEmailHtml(links, origin),
 			});
 		} catch (error) {
 			await env.DB.prepare("UPDATE jobs SET completion_email_sent_at = NULL, updated_at = ? WHERE id = ? AND completion_email_sent_at = ?")
@@ -57,7 +57,6 @@ export async function maybeSendCompletionEmail(job: JobRow, env: AppEnv, baseUrl
 type CompletionLink = {
 	label: string;
 	url: string;
-	fileName: string;
 };
 
 function completionLinks(job: JobRow, origin: string): CompletionLink[] {
@@ -69,7 +68,6 @@ function completionLinks(job: JobRow, origin: string): CompletionLink[] {
 		links.push({
 			label: "Download audio",
 			url: `${origin}/api/jobs/${jobId}/download?token=${token}`,
-			fileName: cleanedFileName(job.input_name),
 		});
 	}
 
@@ -77,7 +75,6 @@ function completionLinks(job: JobRow, origin: string): CompletionLink[] {
 		links.push({
 			label: "Download transcript",
 			url: `${origin}/api/jobs/${jobId}/transcript?token=${token}`,
-			fileName: transcriptFileName(job.input_name),
 		});
 	}
 
@@ -115,66 +112,40 @@ function isPublicHttpsOrigin(value: string): boolean {
 	}
 }
 
-function renderCompletionEmailText(job: JobRow, links: CompletionLink[]): string {
+function renderCompletionEmailText(links: CompletionLink[]): string {
 	return (
 		`ClearMic\n\n` +
-		`Your processing job is ready: ${job.input_name}\n\n` +
-		links.map((link) => `${link.label} (${link.fileName}):\n${link.url}`).join("\n\n") +
-		`\n\nLinks expire in 24 hours from upload. If you did not request this, you can ignore this email.`
+		`Your file is ready.\n\n` +
+		links.map((link) => `${link.label}:\n${link.url}`).join("\n\n") +
+		`\n\nLinks expire 24 hours after upload. If you didn't request this, you can ignore this email.`
 	);
 }
 
-function renderCompletionEmailHtml(job: JobRow, links: CompletionLink[]): string {
-	const sans = "-apple-system,BlinkMacSystemFont,'Inter','Segoe UI',Roboto,Helvetica,Arial,sans-serif";
-	const fileName = escapeHtml(job.input_name);
+function renderCompletionEmailHtml(links: CompletionLink[], origin: string): string {
+	const { sans } = EMAIL_FONTS;
 	const linkHtml = links
-		.map(
-			(link) => `<tr><td style="padding:8px 28px 0;">
-<a href="${escapeAttribute(link.url)}" style="display:block;background:#373cff;color:#ffffff;text-decoration:none;border-radius:10px;padding:12px 14px;font-family:${sans};font-size:14px;font-weight:600;text-align:center;">${escapeHtml(link.label)}</a>
-<p style="font-family:${sans};font-size:11px;color:#a3a3a3;margin:6px 0 0;word-break:break-all;">${escapeHtml(link.fileName)}</p>
-</td></tr>`,
+		.map((link, i) =>
+			renderEmailButton({
+				url: link.url,
+				label: link.label,
+				variant: i === 0 ? "primary" : "ghost",
+			}),
 		)
 		.join("");
 
-	return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<meta name="color-scheme" content="light only">
-<meta name="supported-color-schemes" content="light">
-<title>Your ClearMic file is ready</title>
-</head>
-<body style="margin:0;padding:0;background:#fafaf9;font-family:${sans};color:#0a0a0a;-webkit-font-smoothing:antialiased;">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="background:#fafaf9;padding:48px 16px;">
-<tr><td align="center">
-<table role="presentation" width="100%" cellspacing="0" cellpadding="0" border="0" style="max-width:440px;background:#ffffff;border:1px solid #ececeb;border-radius:16px;">
-<tr><td style="padding:28px 28px 0;">
-<table role="presentation" cellspacing="0" cellpadding="0" border="0"><tr>
-<td style="vertical-align:middle;padding-right:9px;line-height:0;font-size:0;"><span style="display:inline-block;width:9px;height:9px;border-radius:999px;background:#373cff;"></span></td>
-<td style="vertical-align:middle;font-family:${sans};font-size:14px;font-weight:600;letter-spacing:-0.01em;color:#0a0a0a;">ClearMic</td>
-</tr></table>
-</td></tr>
-<tr><td style="padding:24px 28px 4px;">
+	const body = `<tr><td style="padding:24px 28px 4px;">
 <h1 style="font-family:${sans};font-size:19px;font-weight:600;letter-spacing:-0.015em;color:#0a0a0a;margin:0 0 6px;">Your file is ready</h1>
-<p style="font-family:${sans};font-size:13px;color:#525252;line-height:1.5;margin:0;">${fileName} finished processing. Download links expire 24 hours after upload.</p>
+<p style="font-family:${sans};font-size:13px;color:#525252;line-height:1.5;margin:0;">Download links expire 24 hours after upload.</p>
 </td></tr>
 ${linkHtml}
-<tr><td style="padding:20px 28px 28px;">
-<p style="font-family:${sans};font-size:12px;color:#a3a3a3;line-height:1.5;margin:0;">If you did not request this, you can ignore this email.</p>
-</td></tr>
-</table>
-<p style="font-family:${sans};font-size:11px;color:#a3a3a3;margin:20px 0 0;text-align:center;">ClearMic</p>
-</td></tr>
-</table>
-</body>
-</html>`;
-}
+<tr><td style="padding:22px 28px 28px;">
+<p style="font-family:${sans};font-size:12px;color:#a3a3a3;line-height:1.5;margin:0;">If you didn't request this, you can ignore this email.</p>
+</td></tr>`;
 
-function escapeHtml(value: string): string {
-	return value.replace(/[&<>"]/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[char] ?? char);
-}
-
-function escapeAttribute(value: string): string {
-	return escapeHtml(value).replace(/'/g, "&#39;");
+	return renderEmailShell({
+		origin: origin || null,
+		title: "Your ClearMic file is ready",
+		preheader: "Your ClearMic file is ready. Download links expire in 24h.",
+		body,
+	});
 }

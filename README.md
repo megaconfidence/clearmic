@@ -39,10 +39,10 @@ Drop a file, choose at least one processing step, get clean audio and/or a trans
 ## How it works
 
 1. **Drop in audio** — WAV, MP3, M4A, FLAC, OGG. Up to 200 MB.
-2. **Build a chain** — Noise removal, enhancement, transcription, or any combination in that order.
+2. **Clean it up** — Pick noise removal, enhancement (Low, Medium, or High strength), transcription, or any combination. Steps apply in order, top to bottom.
 3. **Verify your email** — a 6-digit code. No passwords.
 4. **Wait under a minute** — close the tab if you want, your spot is saved.
-5. **Download audio or read the transcript** — optionally get links by email. Files are yours for 24 hours, then they're gone.
+5. **Download, or come back later** — Grab the cleaned audio and transcript right from the page. Your last 24 hours of jobs stay in the **Recent** library for one-click re-download. Opt in to email and we'll deliver 24-hour download links to your inbox the moment it's ready.
 
 ## Privacy by default
 
@@ -91,17 +91,21 @@ Browser uploads go **directly to R2** via 15-minute presigned PUT URLs, so the W
 
 | Path | What |
 | --- | --- |
-| `src/index.ts` | API router + Queue handler |
+| `src/index.ts` | API router + Queue handler + cron scheduler |
 | `src/auth.ts` | Email OTP, D1 sessions |
 | `src/uploads.ts` | Direct-to-R2 upload intents, quota |
 | `src/jobs.ts` | Job status, input, webhook, download |
 | `src/replicate.ts` | Prediction lifecycle, output persistence |
+| `src/pipeline.ts` | Multi-step processing selection + sequencing |
+| `src/notifications.ts` | Completion-email rendering and dispatch |
+| `src/email-template.ts` | Shared email shell, brand mark, button helpers |
+| `src/cleanup.ts` | Scheduled deletion of expired R2 objects + D1 rows |
 | `src/r2.ts` | Presigned R2 PUT URL signing (`aws4fetch`) |
 | `src/turnstile.ts` | Turnstile siteverify |
 | `src/db.ts` | D1 helpers, public job shape |
-| `src/audio.ts`, `src/model.ts`, `src/http.ts` | Shared helpers |
+| `src/audio.ts`, `src/model.ts`, `src/http.ts`, `src/types.ts` | Shared helpers + types |
 | `public/index.html`, `styles.css`, `app.js` | UI |
-| `public/icon.svg` | App icon (favicon + apple-touch-icon) |
+| `public/icon.svg` | App icon (favicon + apple-touch-icon + email brand mark) |
 | `migrations/` | D1 schema |
 
 </details>
