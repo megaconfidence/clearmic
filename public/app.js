@@ -1,5 +1,9 @@
 const STEPS = ["file", "options", "auth", "processing"];
 const TERMINAL_STATUSES = new Set(["completed", "failed", "canceled"]);
+const ACTIVE_JOB_POLL_MS = 2500;
+const SLOW_JOB_POLL_MS = 7500;
+const POLL_BACKOFF_AFTER_MS = 60_000;
+const JOB_LIST_REFRESH_MS = 30_000;
 
 const steps = Array.from(document.querySelectorAll("[data-step]"));
 const stepDots = Object.fromEntries(STEPS.map((name) => [name, document.querySelector(`[data-dot="${name}"]`)]));
@@ -7,7 +11,6 @@ const stepDots = Object.fromEntries(STEPS.map((name) => [name, document.querySel
 const fields = {
 	audio: document.getElementById("audio"),
 	email: document.getElementById("email"),
-	codeHidden: document.getElementById("code"),
 	codeBlock: document.getElementById("code-block"),
 	codeCells: Array.from(document.querySelectorAll(".code-cell")),
 	turnstileStatus: document.getElementById("turnstile-status"),
@@ -21,6 +24,14 @@ const fields = {
 	expiry: document.getElementById("job-expiry"),
 	result: document.getElementById("result"),
 	player: document.getElementById("player"),
+	noiseRemoval: document.getElementById("noise-removal"),
+	enhance: document.getElementById("enhance"),
+	enhancementControls: document.getElementById("enhancement-controls"),
+	emailOnCompletion: document.getElementById("email-on-completion"),
+	transcribe: document.getElementById("transcribe"),
+	transcript: document.getElementById("transcript"),
+	transcriptText: document.getElementById("transcript-text"),
+	transcriptDownload: document.getElementById("transcript-download"),
 	download: document.getElementById("download"),
 	library: document.getElementById("library"),
 	jobList: document.getElementById("job-list"),
@@ -43,6 +54,9 @@ const fields = {
 
 let currentUser = null;
 let pollTimer;
+let activePollJobId = "";
+let activePollStartedAt = 0;
+let lastJobListRefreshAt = 0;
 let turnstileToken = "";
 let turnstileWidgetId;
 
@@ -59,6 +73,10 @@ document.getElementById("file-next").addEventListener("click", () => {
 
 document.getElementById("options-next").addEventListener("click", () => {
 	showError("");
+	if (!hasSelectedProcessingStep()) {
+		showError("Select at least one processing step.");
+		return;
+	}
 	if (currentUser) {
 		uploadSelectedFile();
 		return;
@@ -75,6 +93,9 @@ fields.signIn.addEventListener("click", () => {
 	showStep("auth");
 	requestAnimationFrame(() => fields.email.focus());
 });
+
+fields.enhance.addEventListener("change", renderEnhancementControls);
+document.addEventListener("visibilitychange", handleVisibilityChange);
 
 for (const button of document.querySelectorAll("[data-back]")) {
 	button.addEventListener("click", () => showStep(button.dataset.back));
@@ -139,14 +160,13 @@ fields.codeCells.forEach((cell, idx) => {
 			void cell.offsetWidth;
 			cell.classList.add("just-filled");
 		}
-		syncHiddenCode();
 		if (digit) {
 			const next = fields.codeCells[idx + 1];
 			if (next) {
 				next.focus();
 				next.select();
 			} else if (getCodeValue().length === 6) {
-				verifyOtpAndUpload();
+				verifyAndContinue();
 			}
 		}
 	});
@@ -174,10 +194,9 @@ fields.codeCells.forEach((cell, idx) => {
 			fields.codeCells[i].value = digit;
 			fields.codeCells[i].classList.toggle("is-filled", Boolean(digit));
 		}
-		syncHiddenCode();
 		const targetIdx = Math.min(text.length, fields.codeCells.length - 1);
 		fields.codeCells[targetIdx].focus();
-		if (text.length === 6) verifyOtpAndUpload();
+		if (text.length === 6) verifyAndContinue();
 	});
 
 	cell.addEventListener("focus", () => cell.select());
@@ -191,6 +210,7 @@ async function init() {
 	await loadMe();
 	await initTurnstile();
 	await loadJobs();
+	renderEnhancementControls();
 	showStep("file");
 }
 
@@ -205,11 +225,13 @@ async function loadJobs() {
 	if (!currentUser) {
 		renderJobList([]);
 		renderQuota(null);
+		lastJobListRefreshAt = 0;
 		return;
 	}
 	const payload = await api("/api/jobs");
 	renderJobList(payload.jobs || []);
 	renderQuota(payload.quota);
+	lastJobListRefreshAt = Date.now();
 }
 
 // ============ auth ============
@@ -266,6 +288,7 @@ async function verifyAndContinue() {
 }
 
 async function logout() {
+	stopJobPolling();
 	await api("/api/logout", { method: "POST" });
 	currentUser = null;
 	renderAccount();
@@ -278,12 +301,16 @@ async function logout() {
 async function uploadSelectedFile() {
 	showError("");
 	setBusy(true);
-	clearTimeout(pollTimer);
+	stopJobPolling();
 
 	try {
 		const file = fields.audio.files[0];
-		const preset = selectedRadio("preset", "light");
-		const outputChoice = selectedRadio("output_choice", "denoised");
+		const noiseRemoval = Boolean(fields.noiseRemoval.checked);
+		const enhance = Boolean(fields.enhance.checked);
+		const transcribe = Boolean(fields.transcribe.checked);
+		if (!noiseRemoval && !enhance && !transcribe) {
+			throw new Error("Select at least one processing step.");
+		}
 
 		const uploadPayload = await api("/api/uploads", {
 			method: "POST",
@@ -291,8 +318,12 @@ async function uploadSelectedFile() {
 				fileName: file.name,
 				fileType: file.type,
 				fileSize: file.size,
-				preset,
-				output_choice: outputChoice,
+				noise_removal: noiseRemoval,
+				enhance,
+				enhancement_preset: selectedRadio("enhancement_preset", "medium"),
+				output_choice: "enhanced",
+				transcribe,
+				email_on_completion: Boolean(fields.emailOnCompletion.checked),
 			}),
 		});
 
@@ -313,7 +344,7 @@ async function uploadSelectedFile() {
 		renderJob(payload.job);
 		showStep("processing");
 		await loadJobs();
-		poll(payload.job.id);
+		startJobPolling(payload.job.id);
 	} catch (error) {
 		showError(error.message || String(error));
 		setBusy(false);
@@ -322,21 +353,78 @@ async function uploadSelectedFile() {
 
 // ============ polling ============
 
+function startJobPolling(jobId) {
+	stopJobPolling();
+	activePollJobId = jobId;
+	activePollStartedAt = Date.now();
+	poll(jobId);
+}
+
+function stopJobPolling() {
+	clearTimeout(pollTimer);
+	pollTimer = undefined;
+	activePollJobId = "";
+	activePollStartedAt = 0;
+}
+
 async function poll(jobId) {
+	if (document.hidden || jobId !== activePollJobId) {
+		return;
+	}
+
 	try {
 		const payload = await api(`/api/jobs/${encodeURIComponent(jobId)}`);
-		renderJob(payload.job);
-		await loadJobs();
-
-		if (TERMINAL_STATUSES.has(payload.job.status)) {
-			setBusy(false);
+		if (jobId !== activePollJobId) {
 			return;
 		}
 
-		pollTimer = setTimeout(() => poll(jobId), 2500);
+		renderJob(payload.job);
+
+		if (TERMINAL_STATUSES.has(payload.job.status)) {
+			stopJobPolling();
+			setBusy(false);
+			await refreshJobListIfStale(true);
+			return;
+		}
+
+		await refreshJobListIfStale();
+		scheduleNextPoll(jobId);
 	} catch (error) {
+		stopJobPolling();
 		showError(error.message || String(error));
 		setBusy(false);
+	}
+}
+
+function scheduleNextPoll(jobId) {
+	clearTimeout(pollTimer);
+	if (document.hidden || jobId !== activePollJobId) {
+		return;
+	}
+
+	const elapsed = Date.now() - activePollStartedAt;
+	const delay = elapsed >= POLL_BACKOFF_AFTER_MS ? SLOW_JOB_POLL_MS : ACTIVE_JOB_POLL_MS;
+	pollTimer = setTimeout(() => poll(jobId), delay);
+}
+
+async function refreshJobListIfStale(force = false) {
+	if (force || Date.now() - lastJobListRefreshAt >= JOB_LIST_REFRESH_MS) {
+		try {
+			await loadJobs();
+		} catch (error) {
+			console.error("Recent jobs refresh failed", error);
+		}
+	}
+}
+
+function handleVisibilityChange() {
+	if (!activePollJobId) {
+		return;
+	}
+
+	clearTimeout(pollTimer);
+	if (!document.hidden) {
+		poll(activePollJobId);
 	}
 }
 
@@ -407,20 +495,45 @@ function renderJob(job) {
 	fields.status.dataset.state = status;
 
 	fields.processingTitle.textContent = titleForStatus(status);
-	fields.processingSub.textContent = subForStatus(status);
+	fields.processingSub.textContent = subForJob(job, status);
 
 	fields.file.textContent = job.inputName;
 	fields.file.title = job.inputName;
 	fields.expiry.textContent = timeRemaining(job.expiresAt);
 	showError(job.error || "");
 
-	if (job.downloadUrl) {
+	if (job.downloadUrl || job.transcript || job.transcriptUrl) {
 		fields.result.hidden = false;
-		fields.player.src = job.downloadUrl;
-		fields.download.href = job.downloadUrl;
-		fields.download.download = "clearmic-cleaned.wav";
+		fields.player.hidden = !job.downloadUrl;
+		if (job.downloadUrl) {
+			fields.player.src = job.downloadUrl;
+		} else {
+			fields.player.removeAttribute("src");
+		}
+		renderTranscript(job.transcript || "");
+		fields.transcriptDownload.hidden = !job.transcriptUrl;
+		if (job.transcriptUrl) {
+			fields.transcriptDownload.href = job.transcriptUrl;
+			fields.transcriptDownload.download = transcriptNameForJob(job);
+		} else {
+			fields.transcriptDownload.removeAttribute("href");
+		}
+		fields.download.hidden = !job.downloadUrl;
+		if (job.downloadUrl) {
+			fields.download.href = job.downloadUrl;
+			fields.download.download = downloadNameForJob(job);
+		} else {
+			fields.download.removeAttribute("href");
+		}
 	} else {
 		fields.result.hidden = true;
+		fields.player.hidden = true;
+		fields.player.removeAttribute("src");
+		fields.transcriptDownload.hidden = true;
+		fields.transcriptDownload.removeAttribute("href");
+		fields.download.hidden = true;
+		fields.download.removeAttribute("href");
+		renderTranscript("");
 	}
 }
 
@@ -464,6 +577,16 @@ function createJobCard(job, index = 0) {
 
 	const meta = document.createElement("div");
 	meta.className = "job-card-meta";
+	for (const label of pipelineLabels(job)) {
+		const step = document.createElement("span");
+		step.textContent = label;
+		meta.append(step);
+
+		const stepSep = document.createElement("span");
+		stepSep.className = "dot-sep";
+		stepSep.textContent = "·";
+		meta.append(stepSep);
+	}
 
 	const badge = document.createElement("span");
 	badge.className = "status-badge";
@@ -483,13 +606,29 @@ function createJobCard(job, index = 0) {
 	main.append(meta);
 	card.append(main);
 
-	if (job.downloadUrl) {
-		const download = document.createElement("a");
-		download.className = "download";
-		download.href = job.downloadUrl;
-		download.download = "clearmic-cleaned.wav";
-		download.textContent = "Download";
-		card.append(download);
+	if (job.downloadUrl || job.transcriptUrl) {
+		const actions = document.createElement("div");
+		actions.className = "job-card-actions";
+
+		if (job.downloadUrl) {
+			const download = document.createElement("a");
+			download.className = "download";
+			download.href = job.downloadUrl;
+			download.download = downloadNameForJob(job);
+			download.textContent = "Audio";
+			actions.append(download);
+		}
+
+		if (job.transcriptUrl) {
+			const transcript = document.createElement("a");
+			transcript.className = "download";
+			transcript.href = job.transcriptUrl;
+			transcript.download = transcriptNameForJob(job);
+			transcript.textContent = "Transcript";
+			actions.append(transcript);
+		}
+
+		card.append(actions);
 	}
 
 	return card;
@@ -518,6 +657,15 @@ function renderQuota(quota) {
 	fields.quota.hidden = false;
 	fields.quotaNum.textContent = remaining;
 	fields.quota.dataset.state = remaining === 0 ? "empty" : remaining <= 2 ? "low" : "ok";
+}
+
+function renderTranscript(transcript) {
+	fields.transcript.hidden = !transcript;
+	fields.transcriptText.textContent = transcript;
+}
+
+function renderEnhancementControls() {
+	fields.enhancementControls.hidden = !fields.enhance.checked;
 }
 
 // ============ step ============
@@ -567,11 +715,14 @@ function titleForStatus(status) {
 	return "Processing";
 }
 
-function subForStatus(status) {
-	if (status === "completed") return "Preview below, then download.";
+function subForJob(job, status) {
+	if (status === "completed") return job.downloadUrl ? "Preview below, then download." : "Transcript below.";
 	if (status === "failed") return "Try again or pick a different file.";
 	if (status === "canceled") return "Nothing was processed.";
 	if (status === "queued") return "Lining up the engine.";
+	if (job.processingStep === "noise_removal") return "Removing noise with Speech Enhancer.";
+	if (job.processingStep === "enhancement") return "Enhancing voice detail with Resemble.";
+	if (job.processingStep === "transcription") return "Transcribing the latest audio.";
 	return "Usually under a minute.";
 }
 
@@ -586,19 +737,14 @@ function clearCodeCells() {
 		cell.value = "";
 		cell.classList.remove("is-filled");
 	}
-	syncHiddenCode();
 }
 
 function getCodeValue() {
 	return fields.codeCells.map((cell) => cell.value).join("");
 }
 
-function syncHiddenCode() {
-	fields.codeHidden.value = getCodeValue();
-}
-
 function resetFlow() {
-	clearTimeout(pollTimer);
+	stopJobPolling();
 	setBusy(false);
 	showError("");
 	fields.audio.value = "";
@@ -606,6 +752,10 @@ function resetFlow() {
 	clearCodeCells();
 	fields.codeBlock.hidden = true;
 	fields.result.hidden = true;
+	fields.player.hidden = true;
+	fields.transcriptDownload.hidden = true;
+	fields.download.hidden = true;
+	renderTranscript("");
 	showStep("file");
 }
 
@@ -637,6 +787,37 @@ function setBusy(nextIsBusy) {
 
 function selectedRadio(name, fallback) {
 	return document.querySelector(`input[name="${name}"]:checked`)?.value || fallback;
+}
+
+function hasSelectedProcessingStep() {
+	return Boolean(fields.noiseRemoval.checked || fields.enhance.checked || fields.transcribe.checked);
+}
+
+function pipelineLabels(job) {
+	const labels = [];
+	if (job.noiseRemovalRequested) labels.push("Noise");
+	if (job.enhancementRequested) labels.push("Enhance");
+	if (job.transcriptionRequested) labels.push("Transcript");
+	return labels;
+}
+
+function downloadNameForJob(job) {
+	return `${safeBaseNameForJob(job)}-cleaned.wav`;
+}
+
+function transcriptNameForJob(job) {
+	return `${safeBaseNameForJob(job)}-transcript.txt`;
+}
+
+function safeBaseNameForJob(job) {
+	const base = String(job.inputName || "audio").replace(/\.[^.]+$/, "") || "audio";
+	const safeBase = base
+		.trim()
+		.replace(/[^a-zA-Z0-9._-]+/g, "-")
+		.replace(/-+/g, "-")
+		.replace(/^-|-$/g, "")
+		.slice(0, 90);
+	return safeBase || "audio";
 }
 
 function formatBytes(bytes) {

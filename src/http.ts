@@ -62,8 +62,13 @@ export async function safeResponseText(response: Response, maxBytes = 1000): Pro
 }
 
 export function getPublicBaseUrl(request: Request): string | null {
-	const origin = new URL(request.url).origin.replace(/\/+$/, "");
-	return isPublicHttpsUrl(origin) ? origin : null;
+	const requestOrigin = new URL(request.url).origin.replace(/\/+$/, "");
+	if (isPublicHttpsUrl(requestOrigin)) {
+		return requestOrigin;
+	}
+
+	const headerOrigin = request.headers.get("origin")?.replace(/\/+$/, "");
+	return headerOrigin && isPublicHttpsUrl(headerOrigin) ? headerOrigin : null;
 }
 
 export function rejectDisallowedOrigin(request: Request): Response | null {
@@ -72,11 +77,32 @@ export function rejectDisallowedOrigin(request: Request): Response | null {
 		return null;
 	}
 
-	if (origin === new URL(request.url).origin) {
+	if (isAllowedRequestOrigin(origin, request)) {
 		return null;
 	}
 
 	return json({ error: "Origin is not allowed." }, 403);
+}
+
+function isAllowedRequestOrigin(origin: string, request: Request): boolean {
+	let originUrl: URL;
+	let requestUrl: URL;
+	try {
+		originUrl = new URL(origin);
+		requestUrl = new URL(request.url);
+	} catch {
+		return false;
+	}
+
+	if (originUrl.origin === requestUrl.origin) {
+		return true;
+	}
+
+	if (originUrl.protocol === "https:" && originUrl.hostname.endsWith(".trycloudflare.com")) {
+		return true;
+	}
+
+	return isLocalHost(originUrl.hostname) && isLocalHost(requestUrl.hostname);
 }
 
 async function readLimitedText(body: ReadableStream<Uint8Array> | null, maxBytes: number): Promise<{ text: string; truncated: boolean }> {
@@ -122,8 +148,17 @@ async function readLimitedText(body: ReadableStream<Uint8Array> | null, maxBytes
 function isPublicHttpsUrl(value: string): boolean {
 	try {
 		const url = new URL(value);
-		return url.protocol === "https:" && !["localhost", "127.0.0.1", "0.0.0.0"].includes(url.hostname);
+		return url.protocol === "https:" && !isLocalHost(url.hostname);
 	} catch {
 		return false;
 	}
+}
+
+export function isLocalDevHost(hostname: string): boolean {
+	const normalized = hostname.toLowerCase();
+	return isLocalHost(normalized) || normalized.endsWith(".trycloudflare.com");
+}
+
+export function isLocalHost(hostname: string): boolean {
+	return ["localhost", "127.0.0.1", "0.0.0.0"].includes(hostname.toLowerCase());
 }

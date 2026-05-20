@@ -96,39 +96,74 @@
 				</section>
 
 				<section class="step" data-step="options" hidden>
-					<h1>Options</h1>
-					<p class="hint">Pick how hard the engine works.</p>
+					<h1>Build a chain</h1>
+					<p class="hint">Choose at least one step. Selected steps run from top to bottom.</p>
 
-					<div class="opt-group">
-						<span class="opt-label">Strength</span>
-						<div class="opt-row">
-							<label class="opt-card">
-								<input type="radio" name="preset" value="light" checked />
-								<span>Light</span>
+					<div class="pipeline">
+						<article class="pipeline-option">
+							<label class="pipeline-toggle">
+								<input id="noise-removal" type="checkbox" name="noise_removal" />
+								<span class="step-index">1</span>
+								<span class="pipeline-copy">
+									<strong>Noise removal</strong>
+									<span>playmore/speech-enhancer</span>
+								</span>
 							</label>
-							<label class="opt-card">
-								<input type="radio" name="preset" value="balanced" />
-								<span>Balanced</span>
+							<p class="hint">Reduces room noise, hiss, hum, and street bleed first.</p>
+						</article>
+
+						<article class="pipeline-option">
+							<label class="pipeline-toggle">
+								<input id="enhance" type="checkbox" name="enhance" />
+								<span class="step-index">2</span>
+								<span class="pipeline-copy">
+									<strong>Enhancement</strong>
+									<span>resemble-ai/resemble-enhance</span>
+								</span>
 							</label>
-							<label class="opt-card">
-								<input type="radio" name="preset" value="aggressive" />
-								<span>Aggressive</span>
+
+							<div class="knob-panel" id="enhancement-controls" hidden>
+								<div class="opt-group">
+									<span class="opt-label">Enhancement strength</span>
+									<div class="opt-row compact">
+										<label class="opt-card">
+											<input type="radio" name="enhancement_preset" value="low" />
+											<span>Low</span>
+										</label>
+										<label class="opt-card">
+											<input type="radio" name="enhancement_preset" value="medium" checked />
+											<span>Medium</span>
+										</label>
+										<label class="opt-card">
+											<input type="radio" name="enhancement_preset" value="high" />
+											<span>High</span>
+										</label>
+									</div>
+								</div>
+								<p class="hint">Uses Midpoint solver and 0.5 prior temperature. Strength only changes enhancement passes.</p>
+							</div>
+						</article>
+
+						<article class="pipeline-option">
+							<label class="pipeline-toggle">
+								<input id="transcribe" type="checkbox" name="transcribe" />
+								<span class="step-index">3</span>
+								<span class="pipeline-copy">
+									<strong>Transcription</strong>
+									<span>vaibhavs10/incredibly-fast-whisper</span>
+								</span>
 							</label>
-						</div>
+							<p class="hint">Creates a transcript from the latest audio in the chain.</p>
+						</article>
 					</div>
 
 					<div class="opt-group">
-						<span class="opt-label">Output</span>
-						<div class="opt-row">
-							<label class="opt-card">
-								<input type="radio" name="output_choice" value="enhanced" />
-								<span>Enhanced</span>
-							</label>
-							<label class="opt-card">
-								<input type="radio" name="output_choice" value="denoised" checked />
-								<span>Denoised</span>
-							</label>
-						</div>
+						<span class="opt-label">Delivery</span>
+						<label class="opt-card">
+							<input id="email-on-completion" type="checkbox" name="email_on_completion" />
+							<span>Email me download links when it is done</span>
+						</label>
+						<p class="hint">Links expire with the job after 24 hours.</p>
 					</div>
 
 					<div class="actions">
@@ -157,14 +192,13 @@
 					<div class="code-section" id="code-block" hidden>
 						<div class="field">
 							<div class="code-cells">
-								<input class="code-cell" data-cell="0" type="text" inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Digit 1" />
-								<input class="code-cell" data-cell="1" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 2" />
-								<input class="code-cell" data-cell="2" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 3" />
-								<input class="code-cell" data-cell="3" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 4" />
-								<input class="code-cell" data-cell="4" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 5" />
-								<input class="code-cell" data-cell="5" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 6" />
+								<input class="code-cell" type="text" inputmode="numeric" maxlength="1" autocomplete="one-time-code" aria-label="Digit 1" />
+								<input class="code-cell" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 2" />
+								<input class="code-cell" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 3" />
+								<input class="code-cell" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 4" />
+								<input class="code-cell" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 5" />
+								<input class="code-cell" type="text" inputmode="numeric" maxlength="1" aria-label="Digit 6" />
 							</div>
-							<input type="hidden" id="code" />
 							<p class="hint">Check your inbox. Code expires in 10 minutes.</p>
 						</div>
 						<button class="primary block" id="verify-code" type="button">Verify and upload</button>
@@ -196,6 +230,11 @@
 
 					<div class="result" id="result" hidden>
 						<audio class="player" id="player" controls preload="metadata"></audio>
+						<div class="transcript" id="transcript" hidden>
+							<span class="opt-label">Transcript</span>
+							<p id="transcript-text"></p>
+						</div>
+						<a class="ghost block" id="transcript-download" download="clearmic-transcript.txt" hidden>Download transcript</a>
 						<a class="primary block" id="download" download="clearmic-cleaned.wav">Download</a>
 					</div>
 

@@ -1,6 +1,7 @@
-import { cleanedFileName, objectHeaders } from "./audio";
-import { getJob, isExpired, publicJob } from "./db";
-import { json, readJson } from "./http";
+import { cleanedFileName, escapeHeaderFilename, objectHeaders, transcriptFileName } from "./audio";
+import { getJob, isExpired, markJobFailed, publicJob } from "./db";
+import { getErrorMessage, getPublicBaseUrl, json, readJson } from "./http";
+import { maybeSendCompletionEmail } from "./notifications";
 import { applyPredictionResult, syncReplicatePrediction } from "./replicate";
 import { getDailyJobUsage } from "./uploads";
 import type { AppEnv, JobRow, ReplicatePrediction, User } from "./types";
@@ -16,20 +17,24 @@ export async function listJobs(env: AppEnv, user: User): Promise<Response> {
 		.all<JobRow>();
 
 	const quota = await getDailyJobUsage(env, user);
-	return json({ jobs: results.map(publicJob), quota });
+	return json({ jobs: results.map((job) => publicJob(job)), quota });
 }
 
-export async function getJobStatus(jobId: string, env: AppEnv, user: User): Promise<Response> {
+export async function getJobStatus(jobId: string, request: Request, env: AppEnv, user: User): Promise<Response> {
 	let job = await getJob(env, jobId);
 	if (!job || job.user_id !== user.id || isExpired(job.expires_at)) {
 		return json({ error: "Job not found." }, 404);
 	}
 
+	const baseUrl = getPublicBaseUrl(request) ?? undefined;
 	if (job.status === "processing" && job.replicate_prediction_id) {
-		job = await syncReplicatePrediction(job, env);
+		job = await syncReplicatePrediction(job, env, baseUrl);
+	}
+	if (job.status === "completed") {
+		await maybeSendCompletionEmail(job, env, baseUrl);
 	}
 
-	return json({ job: publicJob(job) });
+	return json({ job: publicJob(job, { includeTranscript: true }) });
 }
 
 export async function getInputAudio(jobId: string, url: URL, env: AppEnv): Promise<Response> {
@@ -55,9 +60,9 @@ export async function getInputAudio(jobId: string, url: URL, env: AppEnv): Promi
 	return new Response(object.body, { headers });
 }
 
-export async function downloadOutput(jobId: string, url: URL, env: AppEnv, user: User): Promise<Response> {
+export async function downloadOutput(jobId: string, url: URL, env: AppEnv): Promise<Response> {
 	const job = await getJob(env, jobId);
-	if (!job || job.user_id !== user.id) {
+	if (!job) {
 		return json({ error: "Job not found." }, 404);
 	}
 
@@ -82,6 +87,33 @@ export async function downloadOutput(jobId: string, url: URL, env: AppEnv, user:
 	return new Response(object.body, { headers });
 }
 
+export async function downloadTranscript(jobId: string, url: URL, env: AppEnv): Promise<Response> {
+	const job = await getJob(env, jobId);
+	if (!job) {
+		return json({ error: "Job not found." }, 404);
+	}
+
+	if (isExpired(job.expires_at)) {
+		return json({ error: "This file has expired." }, 410);
+	}
+
+	if (url.searchParams.get("token") !== job.download_token) {
+		return json({ error: "Invalid download token." }, 403);
+	}
+
+	if (job.status !== "completed" || !job.transcript) {
+		return json({ error: "Transcript is not ready." }, 409);
+	}
+
+	const headers = new Headers({
+		"content-type": "text/plain; charset=utf-8",
+		"content-disposition": `attachment; filename="${escapeHeaderFilename(transcriptFileName(job.input_name))}"`,
+		"cache-control": "private, max-age=0, no-store",
+	});
+
+	return new Response(`${job.transcript}\n`, { headers });
+}
+
 export async function receiveReplicateWebhook(jobId: string, url: URL, request: Request, env: AppEnv): Promise<Response> {
 	let job = await getJob(env, jobId);
 	if (!job) {
@@ -91,16 +123,26 @@ export async function receiveReplicateWebhook(jobId: string, url: URL, request: 
 	if (url.searchParams.get("token") !== job.webhook_token) {
 		return json({ error: "Invalid webhook token." }, 403);
 	}
+	if (job.status !== "queued" && job.status !== "processing") {
+		return json({ job: publicJob(job, { includeTranscript: true }) });
+	}
 
-	const prediction = await readJson<ReplicatePrediction>(request, 64 * 1024);
+	const prediction = await readJson<ReplicatePrediction>(request, 4 * 1024 * 1024);
 	if (!prediction) {
 		return json({ error: "Send webhook payload as JSON." }, 400);
 	}
 
 	if (job.replicate_prediction_id && prediction.id !== job.replicate_prediction_id) {
-		return json({ error: "Prediction ID mismatch." }, 409);
+		return json({ job: publicJob(job) });
 	}
 
-	job = await applyPredictionResult(job, prediction, env);
-	return json({ job: publicJob(job) });
+	const baseUrl = getPublicBaseUrl(request) ?? undefined;
+	try {
+		job = await applyPredictionResult(job, prediction, env, baseUrl);
+	} catch (error) {
+		console.error("Replicate webhook processing failed", error);
+		await markJobFailed(env, job.id, getErrorMessage(error));
+		job = (await getJob(env, job.id)) ?? job;
+	}
+	return json({ job: publicJob(job, { includeTranscript: true }) });
 }

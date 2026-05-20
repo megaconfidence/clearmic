@@ -1,34 +1,31 @@
 import { MAX_UPLOAD_BYTES, formatBytes, isAudioUpload, randomToken, sanitizeFileName } from "./audio";
 import { getJob, isExpired, markJobFailed, publicJob } from "./db";
-import { getErrorMessage, getPublicBaseUrl, json, readJson, rejectDisallowedOrigin } from "./http";
-import { modelOptionsFromValues, REPLICATE_MODEL } from "./model";
+import { getErrorMessage, getPublicBaseUrl, isLocalDevHost, json, readJson, rejectDisallowedOrigin } from "./http";
+import { modelOptionsFromValues } from "./model";
+import { firstSelectedProcessingStep, modelForProcessingStep } from "./pipeline";
 import { createPresignedPutUrl } from "./r2";
 import type { AppEnv, UploadIntentRow, User } from "./types";
 
 const UPLOAD_URL_TTL_SECONDS = 15 * 60;
-export const DAILY_JOB_LIMIT = 10;
+const DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
+const DAILY_JOB_LIMIT = 10;
 const UPLOAD_ID_METADATA_HEADER = "X-Amz-Meta-Clearmic-Upload-Id";
 const UPLOAD_SIZE_METADATA_HEADER = "X-Amz-Meta-Clearmic-Expected-Size";
 
 export async function getDailyJobUsage(env: AppEnv, user: User): Promise<{ used: number; limit: number }> {
-	const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-	const row = await env.DB.prepare(
-		`SELECT
-			(SELECT COUNT(*) FROM jobs WHERE user_id = ? AND created_at >= ?) +
-			(SELECT COUNT(*) FROM upload_intents WHERE user_id = ? AND created_at >= ?) AS count`,
-	)
-		.bind(user.id, since, user.id, since)
-		.first<{ count: number }>();
-
-	return { used: Math.min(row?.count ?? 0, DAILY_JOB_LIMIT), limit: DAILY_JOB_LIMIT };
+	return { used: Math.min(await countDailyUsage(env, user, true), DAILY_JOB_LIMIT), limit: DAILY_JOB_LIMIT };
 }
 
 type UploadRequest = {
 	fileName?: unknown;
 	fileType?: unknown;
 	fileSize?: unknown;
-	preset?: unknown;
+	noise_removal?: unknown;
+	enhance?: unknown;
+	enhancement_preset?: unknown;
 	output_choice?: unknown;
+	transcribe?: unknown;
+	email_on_completion?: unknown;
 };
 
 type UploadMetadata = {
@@ -64,9 +61,16 @@ export async function createUpload(request: Request, env: AppEnv, user: User): P
 	}
 	const upload = parsedUpload.metadata;
 
-	const modelOptions = modelOptionsFromValues(body.preset, body.output_choice);
+	const modelOptions = modelOptionsFromValues(body.enhancement_preset, body.output_choice);
 	if (typeof modelOptions === "string") {
 		return json({ error: modelOptions }, 400);
+	}
+	const noiseRemoval = booleanFromValue(body.noise_removal) ? 1 : 0;
+	const enhance = booleanFromValue(body.enhance) ? 1 : 0;
+	const transcribe = booleanFromValue(body.transcribe) ? 1 : 0;
+	const emailOnCompletion = booleanFromValue(body.email_on_completion) ? 1 : 0;
+	if (!noiseRemoval && !enhance && !transcribe) {
+		return json({ error: "Select at least one processing step." }, 400);
 	}
 
 	const now = new Date().toISOString();
@@ -80,9 +84,9 @@ export async function createUpload(request: Request, env: AppEnv, user: User): P
 	await env.DB.prepare(
 		`INSERT INTO upload_intents (
 			id, user_id, input_key, input_name, input_content_type, input_size,
-			preset, solver, number_function_evaluations, prior_temperature, output_choice,
+			email_on_completion, noise_removal, enhance, transcribe, preset, solver, number_function_evaluations, prior_temperature, output_choice,
 			input_token, download_token, webhook_token, expires_at, upload_expires_at, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	)
 		.bind(
 			uploadId,
@@ -91,6 +95,10 @@ export async function createUpload(request: Request, env: AppEnv, user: User): P
 			upload.fileName,
 			inputContentType,
 			upload.fileSize,
+			emailOnCompletion,
+			noiseRemoval,
+			enhance,
+			transcribe,
 			modelOptions.preset,
 			modelOptions.solver,
 			modelOptions.numberFunctionEvaluations,
@@ -108,14 +116,65 @@ export async function createUpload(request: Request, env: AppEnv, user: User): P
 	return json({
 		upload: {
 			id: uploadId,
-			url: await createPresignedPutUrl(env, inputKey, UPLOAD_URL_TTL_SECONDS, {
-				...uploadHeaders,
-				"Content-Length": String(upload.fileSize),
-			}),
-			headers: uploadHeaders,
+			...(shouldUseWorkerUpload(request)
+				? {
+					strategy: "worker",
+					url: `/api/uploads/${encodeURIComponent(uploadId)}/content`,
+					headers: { "Content-Type": inputContentType },
+				}
+				: {
+					strategy: "r2",
+					url: await createPresignedPutUrl(env, inputKey, UPLOAD_URL_TTL_SECONDS, {
+						...uploadHeaders,
+						"Content-Length": String(upload.fileSize),
+					}),
+					headers: uploadHeaders,
+				}),
 			expiresAt: uploadExpiresAt,
 		},
 	});
+}
+
+export async function uploadContent(uploadId: string, request: Request, env: AppEnv, user: User): Promise<Response> {
+	const originResponse = rejectDisallowedOrigin(request);
+	if (originResponse) {
+		return originResponse;
+	}
+
+	if (!shouldUseWorkerUpload(request)) {
+		return json({ error: "Worker upload is only available during local tunnel development." }, 404);
+	}
+
+	await cleanupExpiredUploadIntents(env).catch((error) => console.error("Expired upload cleanup failed", error));
+
+	const upload = await env.DB.prepare("SELECT * FROM upload_intents WHERE id = ? AND user_id = ? AND upload_expires_at > ?")
+		.bind(uploadId, user.id, new Date().toISOString())
+		.first<UploadIntentRow>();
+	if (!upload) {
+		return json({ error: "Upload not found or expired." }, 404);
+	}
+
+	if (!request.body) {
+		return json({ error: "Upload body is empty." }, 400);
+	}
+
+	const contentLength = request.headers.get("content-length");
+	if (contentLength && Number(contentLength) !== upload.input_size) {
+		await deleteUploadIntent(env, upload);
+		return json({ error: "Uploaded file size did not match." }, 400);
+	}
+
+	await env.AUDIO_BUCKET.put(upload.input_key, request.body, {
+		httpMetadata: {
+			contentType: upload.input_content_type ?? "application/octet-stream",
+		},
+		customMetadata: {
+			"clearmic-upload-id": upload.id,
+			"clearmic-expected-size": String(upload.input_size),
+		},
+	});
+
+	return json({ ok: true });
 }
 
 export async function completeUpload(uploadId: string, request: Request, env: AppEnv, user: User): Promise<Response> {
@@ -160,22 +219,32 @@ export async function completeUpload(uploadId: string, request: Request, env: Ap
 	}
 
 	const now = new Date().toISOString();
+	const firstStep = firstSelectedProcessingStep(upload);
+	if (!firstStep) {
+		await deleteUploadIntent(env, upload);
+		return json({ error: "Select at least one processing step." }, 400);
+	}
+
 	await env.DB.prepare(
 		`INSERT INTO jobs (
 			id, user_id, status, model, input_key, input_name, input_content_type, input_size,
-			preset, solver, number_function_evaluations, prior_temperature, output_choice,
+			email_on_completion, noise_removal, enhance, transcribe, preset, solver, number_function_evaluations, prior_temperature, output_choice,
 			input_token, download_token, webhook_token, expires_at, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	)
 		.bind(
 			upload.id,
 			user.id,
 			"queued",
-			REPLICATE_MODEL,
+			modelForProcessingStep(firstStep),
 			upload.input_key,
 			upload.input_name,
 			upload.input_content_type,
 			upload.input_size,
+			upload.email_on_completion,
+			upload.noise_removal,
+			upload.enhance,
+			upload.transcribe,
 			upload.preset,
 			upload.solver,
 			upload.number_function_evaluations,
@@ -230,6 +299,10 @@ function parseUploadRequest(body: UploadRequest): { metadata: UploadMetadata } |
 	return { metadata: { fileName, fileType, fileSize } };
 }
 
+function booleanFromValue(value: unknown): boolean {
+	return value === true || value === "true" || value === 1 || value === "1";
+}
+
 function browserUploadHeaders(uploadId: string, fileSize: number, contentType: string): Record<string, string> {
 	return {
 		"Content-Type": contentType,
@@ -276,16 +349,22 @@ function customMetadataValue(object: R2Object, key: string): string | null {
 }
 
 async function hasDailyJobCapacity(env: AppEnv, user: User): Promise<boolean> {
-	const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-	const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM jobs WHERE user_id = ? AND created_at >= ?")
-		.bind(user.id, since)
-		.first<{ count: number }>();
-
-	return (row?.count ?? 0) < DAILY_JOB_LIMIT;
+	return (await countDailyUsage(env, user, false)) < DAILY_JOB_LIMIT;
 }
 
 async function hasDailyUploadCapacity(env: AppEnv, user: User): Promise<boolean> {
-	const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+	return (await countDailyUsage(env, user, true)) < DAILY_JOB_LIMIT;
+}
+
+async function countDailyUsage(env: AppEnv, user: User, includeUploadIntents: boolean): Promise<number> {
+	const since = new Date(Date.now() - DAILY_WINDOW_MS).toISOString();
+	if (!includeUploadIntents) {
+		const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM jobs WHERE user_id = ? AND created_at >= ?")
+			.bind(user.id, since)
+			.first<{ count: number }>();
+		return row?.count ?? 0;
+	}
+
 	const row = await env.DB.prepare(
 		`SELECT
 			(SELECT COUNT(*) FROM jobs WHERE user_id = ? AND created_at >= ?) +
@@ -294,7 +373,7 @@ async function hasDailyUploadCapacity(env: AppEnv, user: User): Promise<boolean>
 		.bind(user.id, since, user.id, since)
 		.first<{ count: number }>();
 
-	return (row?.count ?? 0) < DAILY_JOB_LIMIT;
+	return row?.count ?? 0;
 }
 
 async function cleanupExpiredUploadIntents(env: AppEnv): Promise<void> {
@@ -310,4 +389,8 @@ async function cleanupExpiredUploadIntents(env: AppEnv): Promise<void> {
 async function deleteUploadIntent(env: AppEnv, upload: Pick<UploadIntentRow, "id" | "input_key">): Promise<void> {
 	await env.AUDIO_BUCKET.delete(upload.input_key);
 	await env.DB.prepare("DELETE FROM upload_intents WHERE id = ?").bind(upload.id).run();
+}
+
+function shouldUseWorkerUpload(request: Request): boolean {
+	return isLocalDevHost(new URL(request.url).hostname);
 }

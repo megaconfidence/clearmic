@@ -2,10 +2,10 @@ import { cleanupExpiredData } from "./cleanup";
 import { getCurrentUser, getMe, logout, requestOtp, unauthorized, verifyOtp } from "./auth";
 import { markJobFailed } from "./db";
 import { HttpError, getErrorMessage, json } from "./http";
-import { downloadOutput, getInputAudio, getJobStatus, listJobs, receiveReplicateWebhook } from "./jobs";
+import { downloadOutput, downloadTranscript, getInputAudio, getJobStatus, listJobs, receiveReplicateWebhook } from "./jobs";
 import { processQueuedJob } from "./replicate";
 import { getConfig } from "./turnstile";
-import { completeUpload, createUpload } from "./uploads";
+import { completeUpload, createUpload, uploadContent } from "./uploads";
 import type { AppEnv, ProcessJobMessage } from "./types";
 
 export default {
@@ -52,7 +52,7 @@ async function routeRequest(request: Request, env: AppEnv): Promise<Response> {
 	}
 
 	if (request.method === "GET" && url.pathname === "/api/config") {
-		return getConfig(env);
+		return getConfig(request, env);
 	}
 
 	if (request.method === "POST" && url.pathname === "/api/auth/request-otp") {
@@ -89,6 +89,12 @@ async function routeRequest(request: Request, env: AppEnv): Promise<Response> {
 		return completeUpload(decodeURIComponent(uploadMatch[1]), request, env, user);
 	}
 
+	const uploadContentMatch = /^\/api\/uploads\/([^/]+)\/content$/.exec(url.pathname);
+	if (uploadContentMatch && request.method === "PUT") {
+		if (!user) return unauthorized();
+		return uploadContent(decodeURIComponent(uploadContentMatch[1]), request, env, user);
+	}
+
 	const match = /^\/api\/jobs\/([^/]+)(?:\/([^/]+))?$/.exec(url.pathname);
 	if (!match) {
 		return json({ error: "Not found" }, 404);
@@ -99,7 +105,7 @@ async function routeRequest(request: Request, env: AppEnv): Promise<Response> {
 
 	if (!action && request.method === "GET") {
 		if (!user) return unauthorized();
-		return getJobStatus(jobId, env, user);
+		return getJobStatus(jobId, request, env, user);
 	}
 
 	if (action === "input" && request.method === "GET") {
@@ -107,8 +113,11 @@ async function routeRequest(request: Request, env: AppEnv): Promise<Response> {
 	}
 
 	if (action === "download" && request.method === "GET") {
-		if (!user) return unauthorized();
-		return downloadOutput(jobId, url, env, user);
+		return downloadOutput(jobId, url, env);
+	}
+
+	if (action === "transcript" && request.method === "GET") {
+		return downloadTranscript(jobId, url, env);
 	}
 
 	if (action === "webhook" && request.method === "POST") {

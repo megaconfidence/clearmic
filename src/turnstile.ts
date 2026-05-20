@@ -1,13 +1,16 @@
-import { json } from "./http";
+import { isLocalDevHost, json } from "./http";
 import type { AppEnv } from "./types";
+
+const TURNSTILE_TEST_SITE_KEY = "1x00000000000000000000AA";
+const TURNSTILE_TEST_SECRET_KEY = "1x0000000000000000000000000000000AA";
 
 type TurnstileResult = {
 	success: boolean;
 	"error-codes"?: string[];
 };
 
-export function getConfig(env: AppEnv): Response {
-	return json({ turnstileSiteKey: env.TURNSTILE_SITE_KEY });
+export function getConfig(request: Request, env: AppEnv): Response {
+	return json({ turnstileSiteKey: turnstileKeys(request, env).siteKey });
 }
 
 export async function validateTurnstile(token: unknown, request: Request, env: AppEnv): Promise<Response | null> {
@@ -16,7 +19,7 @@ export async function validateTurnstile(token: unknown, request: Request, env: A
 	}
 
 	const form = new FormData();
-	form.set("secret", env.TURNSTILE_SECRET_KEY);
+	form.set("secret", turnstileKeys(request, env).secretKey);
 	form.set("response", token);
 	form.set("idempotency_key", crypto.randomUUID());
 
@@ -43,4 +46,18 @@ export async function validateTurnstile(token: unknown, request: Request, env: A
 	}
 
 	return outcome.success ? null : json({ error: "Verification failed. Please try again." }, 403);
+}
+
+function turnstileKeys(request: Request, env: AppEnv): { siteKey: string; secretKey: string } {
+	if (isLocalDevHost(new URL(request.url).hostname)) {
+		return {
+			siteKey: TURNSTILE_TEST_SITE_KEY,
+			secretKey: TURNSTILE_TEST_SECRET_KEY,
+		};
+	}
+
+	return {
+		siteKey: env.TURNSTILE_SITE_KEY,
+		secretKey: env.TURNSTILE_SECRET_KEY,
+	};
 }

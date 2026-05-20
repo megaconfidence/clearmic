@@ -20,6 +20,11 @@ export function cleanedFileName(inputName: string): string {
 	return `${base || "audio"}-cleaned.wav`;
 }
 
+export function transcriptFileName(inputName: string): string {
+	const base = sanitizeFileName(inputName).replace(/\.[^.]+$/, "");
+	return `${base || "audio"}-transcript.txt`;
+}
+
 export function escapeHeaderFilename(name: string): string {
 	return name.replace(/["\\\r\n]/g, "");
 }

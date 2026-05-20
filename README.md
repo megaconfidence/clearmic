@@ -14,9 +14,9 @@
 
 ## Noise out. Voice forward.
 
-Background hum, room reverb, street bleed, fan whine — they ruin recordings. ClearMic strips them out and hands you back a clean WAV. No desktop apps, no plugin chains, no learning curve.
+Background hum, room reverb, street bleed, fan whine — they ruin recordings. ClearMic can remove noise, enhance speech, transcribe, or chain those steps together. No desktop apps, no plugin chains, no learning curve.
 
-Drop a file, pick a strength, get clean audio back in under a minute.
+Drop a file, choose at least one processing step, get clean audio and/or a transcript back in under a minute.
 
 ## Built for
 
@@ -39,26 +39,27 @@ Drop a file, pick a strength, get clean audio back in under a minute.
 ## How it works
 
 1. **Drop in audio** — WAV, MP3, M4A, FLAC, OGG. Up to 200 MB.
-2. **Pick a strength** — Light, Balanced, or Aggressive. Choose Enhanced (polished) or Denoised (natural).
+2. **Build a chain** — Noise removal, enhancement, transcription, or any combination in that order.
 3. **Verify your email** — a 6-digit code. No passwords.
 4. **Wait under a minute** — close the tab if you want, your spot is saved.
-5. **Download the clean WAV** — yours for 24 hours, then it's gone.
+5. **Download audio or read the transcript** — optionally get links by email. Files are yours for 24 hours, then they're gone.
 
 ## Privacy by default
 
 - All audio is **automatically purged 24 hours** after upload
 - No tracking, no analytics, no third-party ads
 - Sessions expire after 30 days
-- 10 cleanups per day per email — keeps costs sustainable and abuse contained
+- 10 processing jobs per day per email — keeps costs sustainable and abuse contained
 
 ## The engine
 
-ClearMic runs on [`resemble-ai/resemble-enhance`](https://replicate.com/resemble-ai/resemble-enhance), a state-of-the-art speech enhancement model. Two operating modes:
+ClearMic runs a selectable Replicate pipeline:
 
-- **Denoise** — strips background noise without coloring the voice
-- **Enhance** — denoises *and* applies subtle voice enhancement for a more finished sound
+- **Noise removal** — [`playmore/speech-enhancer`](https://replicate.com/playmore/speech-enhancer)
+- **Enhancement** — [`resemble-ai/resemble-enhance`](https://replicate.com/resemble-ai/resemble-enhance), with Low, Medium, and High presets
+- **Transcription** — [`vaibhavs10/incredibly-fast-whisper`](https://replicate.com/vaibhavs10/incredibly-fast-whisper)
 
-You pick. The model never alters output behind your back.
+When multiple steps are selected, each step receives the output of the prior step. Transcription always uses the latest audio in the chain and does not change the downloadable audio.
 
 ---
 
@@ -77,7 +78,7 @@ Built on the Cloudflare edge — single Worker, no backend servers.
 | Queue | Cloudflare Queues for async job kickoff |
 | Email | Cloudflare Email Service |
 | Bot check | Cloudflare Turnstile |
-| AI | Replicate (`resemble-ai/resemble-enhance`) |
+| AI | Replicate (`playmore/speech-enhancer`, `resemble-ai/resemble-enhance`, `vaibhavs10/incredibly-fast-whisper`) |
 
 Browser uploads go **directly to R2** via 15-minute presigned PUT URLs, so the Worker never buffers large upload bodies. The presigned URLs sign exact `Content-Type`, `Content-Length`, and custom metadata; the completion endpoint verifies the stored object before queueing. Sessions live in D1 (not KV) for stronger consistency and revocability. Replicate output URLs are validated against an allowlist of `replicate.delivery` hosts before fetching.
 
@@ -121,12 +122,15 @@ Browser uploads go **directly to R2** via 15-minute presigned PUT URLs, so the W
 | `POST` | `/api/uploads/:id/complete` | Verify upload, queue job |
 | `GET` | `/api/jobs` | List active jobs + quota |
 | `GET` | `/api/jobs/:id` | Job status |
-| `GET` | `/api/jobs/:id/download?token=…` | Download clean output |
+| `GET` | `/api/jobs/:id/download?token=…` | Download clean output with job token |
+| `GET` | `/api/jobs/:id/transcript?token=…` | Download transcript text with job token |
 
-Upload body: `{ fileName, fileType, fileSize, preset, output_choice }`
+Upload body: `{ fileName, fileType, fileSize, noise_removal, enhance, transcribe, enhancement_preset, email_on_completion }`
 
-- `preset` — `light` · `balanced` · `aggressive`
-- `output_choice` — `enhanced` · `denoised`
+- Select at least one of `noise_removal`, `enhance`, or `transcribe`
+- `enhancement_preset` — `low` (32 evaluations) · `medium` (64) · `high` (128), used when `enhance` is selected
+- Enhancement always uses `solver: "Midpoint"` and `prior_temperature: 0.5`; only `number_function_evaluations` changes by preset
+- `email_on_completion` — optional boolean; sends 24-hour download links after the final selected step completes
 
 </details>
 
@@ -139,12 +143,14 @@ Upload body: `{ fileName, fileType, fileSize, preset, output_choice }`
 npm install
 cp .env.example .env   # fill in secrets
 npm run db:migrate:local
-npm run dev            # localhost only
-# or
 npm run dev:tunnel     # public URL via Cloudflare Tunnel
 ```
 
-Replicate fetches uploaded audio from a **public HTTPS URL**, so end-to-end denoising against `localhost` won't work. Use `dev:tunnel` to get a public URL Replicate can reach.
+Replicate fetches uploaded audio from a **public HTTPS URL**, so end-to-end processing against `localhost` won't work. Use the `dev:tunnel` URL in your browser, not `localhost`.
+
+During local tunnel development, browser uploads go through the Worker into Wrangler's local R2 simulation instead of using presigned R2 URLs. This avoids the local-R2 versus remote-R2 mismatch while still giving Replicate a public URL to fetch `/api/jobs/:id/input`. Deployed production traffic still uses direct-to-R2 uploads.
+
+Turnstile automatically uses Cloudflare's official always-pass test keys on `localhost`, `127.0.0.1`, and `*.trycloudflare.com`. Production hosts still use `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` from the environment.
 
 Don't create `.dev.vars` — it overrides `.env` in Wrangler and we expect `.env`.
 
@@ -198,10 +204,11 @@ npm run deploy
 <br>
 
 - Turnstile validates every OTP request before email is sent
-- 10 cleanups per email per rolling 24h window (counts queued jobs + pending uploads)
+- 10 processing jobs per email per rolling 24h window (counts queued jobs + pending uploads)
 - Direct R2 uploads via 15-minute presigned URLs — Worker never buffers upload bodies
 - Upload URLs sign exact `Content-Type`, `Content-Length`, and ClearMic metadata; `/complete` re-verifies the stored object
 - Per-job random tokens guard Replicate input, webhook, and download routes
+- Completion emails only include tokenized links that expire with the job
 - R2 lifecycle hard-deletes after 1 day; D1 `expires_at` blocks access at exactly 24h
 - R2 CORS pins browser upload origins
 - OTPs: 10 min TTL, single-use, locked after 5 wrong attempts
