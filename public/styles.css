@@ -161,8 +161,8 @@ button {
 	height: 22px;
 	display: block;
 	flex-shrink: 0;
+	border-radius: 50%;
 	box-shadow: 0 1px 3px rgba(55, 60, 255, 0.18);
-	border-radius: 5px;
 	transition: transform 240ms var(--ease-spring);
 }
 
