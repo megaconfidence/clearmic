@@ -1542,40 +1542,45 @@ a.primary {
 :root[data-theme="dark"] {
 	color-scheme: dark;
 
-	--bg: #0c0c0e;
-	--surface: #161618;
-	--surface-2: #1f1f22;
-	--surface-3: #2a2a2e;
+	/* Lifted dark palette — anchored around iOS dark mode levels so the page
+	   reads as "comfortable dark" rather than pure void. Each surface step
+	   adds ~10-14 in luminance to keep the layer separation legible. */
+	--bg: #1c1c1f;
+	--surface: #28282c;
+	--surface-2: #33333a;
+	--surface-3: #404048;
 
 	--text: #fafafa;
 	--text-2: #a1a1aa;
-	--text-3: #71717a;
-	--text-4: #3f3f46;
+	--text-3: #74747e;
+	--text-4: #4a4a52;
 
-	--border: #262629;
-	--border-2: #34343a;
+	--border: #36363c;
+	--border-2: #48484f;
 
 	/* Brightened accent so it stays legible as text on a dark surface
 	   while still reading as ClearMic blue. */
 	--accent: #5a5fff;
 	--accent-hover: #7479ff;
-	--accent-soft: rgba(90, 95, 255, 0.16);
+	--accent-soft: rgba(90, 95, 255, 0.18);
 	--accent-ring: rgba(90, 95, 255, 0.35);
 
 	--ok: #4ade80;
-	--ok-soft: rgba(74, 222, 128, 0.14);
+	--ok-soft: rgba(74, 222, 128, 0.16);
 	--err: #f87171;
-	--err-soft: rgba(248, 113, 113, 0.14);
+	--err-soft: rgba(248, 113, 113, 0.16);
 	--amber: #fbbf24;
-	--amber-soft: rgba(251, 191, 36, 0.14);
+	--amber-soft: rgba(251, 191, 36, 0.16);
 
+	/* Softer shadow than the previous near-black palette needed — the page is
+	   no longer a void, so the card doesn't have to fight as hard to lift. */
 	--shadow-card:
-		0 1px 2px rgba(0, 0, 0, 0.4),
-		0 8px 24px rgba(0, 0, 0, 0.32);
+		0 1px 2px rgba(0, 0, 0, 0.28),
+		0 8px 24px rgba(0, 0, 0, 0.22);
 
-	--mark-outline: rgba(255, 255, 255, 0.08);
-	--knob-bg: rgba(0, 0, 0, 0.28);
-	--knob-border: rgba(90, 95, 255, 0.22);
+	--mark-outline: rgba(255, 255, 255, 0.1);
+	--knob-bg: rgba(0, 0, 0, 0.24);
+	--knob-border: rgba(90, 95, 255, 0.24);
 }
 
 /* The primary button keeps its accent-on-white treatment in dark mode, so
