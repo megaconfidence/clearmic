@@ -4,6 +4,7 @@ const ACTIVE_JOB_POLL_MS = 2500;
 const SLOW_JOB_POLL_MS = 7500;
 const POLL_BACKOFF_AFTER_MS = 60_000;
 const JOB_LIST_REFRESH_MS = 30_000;
+const THEME_STORAGE_KEY = "clearmic-theme";
 
 const steps = Array.from(document.querySelectorAll("[data-step]"));
 const stepDots = Object.fromEntries(STEPS.map((name) => [name, document.querySelector(`[data-dot="${name}"]`)]));
@@ -53,6 +54,7 @@ const fields = {
 	verifyCode: document.getElementById("verify-code"),
 	sendCode: document.getElementById("send-code"),
 	resendCode: document.getElementById("resend-code"),
+	themeToggle: document.getElementById("theme-toggle"),
 };
 
 let currentUser = null;
@@ -117,6 +119,15 @@ fields.signIn.addEventListener("click", () => {
 
 fields.enhance.addEventListener("change", renderEnhancementControls);
 document.addEventListener("visibilitychange", handleVisibilityChange);
+fields.themeToggle.addEventListener("click", toggleTheme);
+
+// Follow system theme changes only if the user hasn't picked one explicitly.
+// Once they click the toggle, their choice is sticky across system changes.
+const systemThemeQuery = window.matchMedia?.("(prefers-color-scheme: dark)");
+systemThemeQuery?.addEventListener?.("change", (event) => {
+	if (storedTheme()) return;
+	applyTheme(event.matches ? "dark" : "light");
+});
 
 for (const button of document.querySelectorAll("[data-back]")) {
 	button.addEventListener("click", () => showStep(button.dataset.back));
@@ -497,7 +508,10 @@ async function initTurnstile() {
 		await waitForTurnstile();
 		turnstileWidgetId = window.turnstile.render("#turnstile-widget", {
 			sitekey: config.turnstileSiteKey,
-			theme: "light",
+			// Match Turnstile to the resolved app theme at render time. The widget
+			// itself doesn't support a runtime theme swap, so subsequent toggles
+			// keep its initial palette — acceptable for the brief OTP window.
+			theme: currentTheme(),
 			callback(token) {
 				turnstileToken = token;
 				setTurnstileStatus("Verification ready.", "ready");
@@ -886,6 +900,40 @@ async function api(path, options = {}) {
 		throw new Error(payload.error || "Request failed.");
 	}
 	return payload;
+}
+
+// ============ theme ============
+
+function currentTheme() {
+	return document.documentElement.dataset.theme === "dark" ? "dark" : "light";
+}
+
+function applyTheme(theme) {
+	document.documentElement.dataset.theme = theme === "dark" ? "dark" : "light";
+}
+
+function storedTheme() {
+	try {
+		const value = localStorage.getItem(THEME_STORAGE_KEY);
+		return value === "light" || value === "dark" ? value : null;
+	} catch {
+		return null;
+	}
+}
+
+function persistTheme(theme) {
+	try {
+		localStorage.setItem(THEME_STORAGE_KEY, theme);
+	} catch {
+		// localStorage unavailable (privacy mode, quota) — the toggle still works for
+		// the current session, just doesn't survive reloads.
+	}
+}
+
+function toggleTheme() {
+	const next = currentTheme() === "dark" ? "light" : "dark";
+	applyTheme(next);
+	persistTheme(next);
 }
 
 // ============ small helpers ============

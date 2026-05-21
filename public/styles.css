@@ -1,5 +1,9 @@
 /* =====================================================
-   ClearMic · light theme, minimal
+   ClearMic · light + dark themes, minimal
+   Tokens are defined on :root (light) and overridden on
+   :root[data-theme="dark"]. The active theme is set by an
+   inline script in <head> before paint to avoid FOUC, and
+   toggled at runtime via the .theme-toggle button.
    ===================================================== */
 
 *,
@@ -56,6 +60,11 @@
 	--shadow-card:
 		0 1px 2px rgba(15, 15, 15, 0.04),
 		0 4px 16px rgba(15, 15, 15, 0.04);
+
+	/* component-level tokens that aren't a 1:1 mirror of one of the base swatches */
+	--mark-outline: rgba(0, 0, 0, 0.06);
+	--knob-bg: rgba(255, 255, 255, 0.55);
+	--knob-border: rgba(55, 60, 255, 0.14);
 }
 
 html {
@@ -75,6 +84,12 @@ body {
 	letter-spacing: -0.005em;
 	text-wrap: pretty;
 	animation: pageIn 480ms var(--ease-out-expo) both;
+	/* Smooth body-level surfaces during theme switches. Interactive
+	   elements ride their own background-color transitions and animate
+	   automatically when tokens change. */
+	transition:
+		background-color 240ms var(--ease),
+		color 240ms var(--ease);
 }
 
 h1,
@@ -165,7 +180,7 @@ button {
 	display: block;
 	flex-shrink: 0;
 	border-radius: 50%;
-	outline: 1px solid rgba(0, 0, 0, 0.06);
+	outline: 1px solid var(--mark-outline);
 	outline-offset: -1px;
 	box-shadow: 0 1px 2px rgba(55, 60, 255, 0.22);
 	transition-property: transform;
@@ -216,7 +231,7 @@ button {
 }
 
 .quota[data-state="low"] {
-	background: #fef3c7;
+	background: var(--amber-soft);
 	color: var(--amber);
 }
 
@@ -740,8 +755,8 @@ a.primary {
 	padding: 12px;
 	margin-top: 4px;
 	border-radius: var(--r-sm); /* 12 (outer) − 12 (padding) ≈ flush; use small radius to feel inset */
-	background: rgba(255, 255, 255, 0.55);
-	box-shadow: inset 0 0 0 1px rgba(55, 60, 255, 0.14);
+	background: var(--knob-bg);
+	box-shadow: inset 0 0 0 1px var(--knob-border);
 	animation: resultIn 280ms var(--ease-out-expo) both;
 }
 
@@ -1486,4 +1501,94 @@ a.primary {
 		animation-iteration-count: 1 !important;
 		transition-duration: 0.01ms !important;
 	}
+}
+
+/* ===== theme toggle ===== */
+
+.theme-toggle {
+	color: var(--text-2);
+}
+
+.theme-toggle:hover {
+	color: var(--text);
+}
+
+.theme-toggle .theme-icon {
+	width: 15px;
+	height: 15px;
+	transition: transform 320ms var(--ease-spring);
+}
+
+.theme-toggle:active .theme-icon {
+	transform: rotate(-12deg);
+}
+
+/* Show only the icon that matches the active theme. Both icons live in the
+   DOM so the toggle has a stable hit area and the swap is instant. */
+.theme-toggle .theme-icon-moon {
+	display: none;
+}
+
+:root[data-theme="dark"] .theme-toggle .theme-icon-sun {
+	display: none;
+}
+
+:root[data-theme="dark"] .theme-toggle .theme-icon-moon {
+	display: block;
+}
+
+/* ===== dark theme ===== */
+
+:root[data-theme="dark"] {
+	color-scheme: dark;
+
+	--bg: #0c0c0e;
+	--surface: #161618;
+	--surface-2: #1f1f22;
+	--surface-3: #2a2a2e;
+
+	--text: #fafafa;
+	--text-2: #a1a1aa;
+	--text-3: #71717a;
+	--text-4: #3f3f46;
+
+	--border: #262629;
+	--border-2: #34343a;
+
+	/* Brightened accent so it stays legible as text on a dark surface
+	   while still reading as ClearMic blue. */
+	--accent: #5a5fff;
+	--accent-hover: #7479ff;
+	--accent-soft: rgba(90, 95, 255, 0.16);
+	--accent-ring: rgba(90, 95, 255, 0.35);
+
+	--ok: #4ade80;
+	--ok-soft: rgba(74, 222, 128, 0.14);
+	--err: #f87171;
+	--err-soft: rgba(248, 113, 113, 0.14);
+	--amber: #fbbf24;
+	--amber-soft: rgba(251, 191, 36, 0.14);
+
+	--shadow-card:
+		0 1px 2px rgba(0, 0, 0, 0.4),
+		0 8px 24px rgba(0, 0, 0, 0.32);
+
+	--mark-outline: rgba(255, 255, 255, 0.08);
+	--knob-bg: rgba(0, 0, 0, 0.28);
+	--knob-border: rgba(90, 95, 255, 0.22);
+}
+
+/* The primary button keeps its accent-on-white treatment in dark mode, so
+   the inset highlight stays visible. No override needed for .primary itself,
+   only the contrast-sensitive bits that hardcoded near-black or near-white. */
+
+:root[data-theme="dark"] ::selection {
+	background: var(--accent);
+	color: #ffffff;
+}
+
+/* Native audio control renders dark by virtue of color-scheme: dark, but
+   give it a subtle frame so it sits naturally on the card. */
+:root[data-theme="dark"] .player {
+	background: var(--surface-2);
 }

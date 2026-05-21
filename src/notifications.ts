@@ -1,5 +1,5 @@
 import { getUser, isExpired } from "./db";
-import { EMAIL_FONTS, renderEmailButton, renderEmailShell } from "./email-template";
+import { EMAIL_FONTS, escapeHtml, renderEmailButton, renderEmailShell } from "./email-template";
 import type { AppEnv, JobRow } from "./types";
 
 export async function maybeSendCompletionEmail(job: JobRow, env: AppEnv, baseUrl?: string): Promise<void> {
@@ -35,13 +35,15 @@ export async function maybeSendCompletionEmail(job: JobRow, env: AppEnv, baseUrl
 			return;
 		}
 
+		const fileName = job.input_name || "audio";
+
 		try {
 			await env.EMAIL.send({
 				to: user.email,
 				from: env.EMAIL_FROM,
-				subject: "Your ClearMic file is ready",
-				text: renderCompletionEmailText(links),
-				html: renderCompletionEmailHtml(links, origin),
+				subject: subjectFor(fileName),
+				text: renderCompletionEmailText(fileName, links),
+				html: renderCompletionEmailHtml(fileName, links, origin),
 			});
 		} catch (error) {
 			await env.DB.prepare("UPDATE jobs SET completion_email_sent_at = NULL, updated_at = ? WHERE id = ? AND completion_email_sent_at = ?")
@@ -52,6 +54,17 @@ export async function maybeSendCompletionEmail(job: JobRow, env: AppEnv, baseUrl
 	} catch (error) {
 		console.error("Completion email failed", error);
 	}
+}
+
+// Inbox subjects above ~70 chars get truncated by most clients. Keep the
+// "Your file is ready" lead-in front-loaded so it stays readable when long
+// filenames get clipped at the tail.
+function subjectFor(fileName: string): string {
+	const stripped = fileName.replace(/[\r\n"\\]/g, "").trim();
+	if (!stripped) return "Your ClearMic file is ready";
+	const max = 52; // leaves headroom for the "Your file is ready: " prefix
+	const display = stripped.length > max ? `${stripped.slice(0, max - 1)}…` : stripped;
+	return `Your file is ready: ${display}`;
 }
 
 type CompletionLink = {
@@ -112,17 +125,18 @@ function isPublicHttpsOrigin(value: string): boolean {
 	}
 }
 
-function renderCompletionEmailText(links: CompletionLink[]): string {
+function renderCompletionEmailText(fileName: string, links: CompletionLink[]): string {
 	return (
 		`ClearMic\n\n` +
-		`Your file is ready.\n\n` +
+		`Your file is ready.\n` +
+		`File: ${fileName}\n\n` +
 		links.map((link) => `${link.label}:\n${link.url}`).join("\n\n") +
 		`\n\nLinks expire 24 hours after upload. If you didn't request this, you can ignore this email.`
 	);
 }
 
-function renderCompletionEmailHtml(links: CompletionLink[], origin: string): string {
-	const { sans } = EMAIL_FONTS;
+function renderCompletionEmailHtml(fileName: string, links: CompletionLink[], origin: string): string {
+	const { sans, mono } = EMAIL_FONTS;
 	const linkHtml = links
 		.map((link, i) =>
 			renderEmailButton({
@@ -133,8 +147,13 @@ function renderCompletionEmailHtml(links: CompletionLink[], origin: string): str
 		)
 		.join("");
 
+	// Filename rendered as a soft monospace chip so it visually echoes the
+	// file-tag treatment in the app and remains scannable when long.
+	const fileChip = `<span style="display:inline-block;padding:3px 8px;border-radius:6px;background:#f5f5f4;font-family:${mono};font-size:12px;font-weight:500;color:#525252;letter-spacing:0;word-break:break-all;">${escapeHtml(fileName)}</span>`;
+
 	const body = `<tr><td style="padding:24px 28px 4px;">
-<h1 style="font-family:${sans};font-size:19px;font-weight:600;letter-spacing:-0.015em;color:#0a0a0a;margin:0 0 6px;">Your file is ready</h1>
+<h1 style="font-family:${sans};font-size:19px;font-weight:600;letter-spacing:-0.015em;color:#0a0a0a;margin:0 0 10px;">Your file is ready</h1>
+<p style="margin:0 0 8px;line-height:1.6;">${fileChip}</p>
 <p style="font-family:${sans};font-size:13px;color:#525252;line-height:1.5;margin:0;">Download links expire 24 hours after upload.</p>
 </td></tr>
 ${linkHtml}
@@ -144,8 +163,8 @@ ${linkHtml}
 
 	return renderEmailShell({
 		origin: origin || null,
-		title: "Your ClearMic file is ready",
-		preheader: "Your ClearMic file is ready. Download links expire in 24h.",
+		title: `Your ClearMic file "${fileName}" is ready`,
+		preheader: `${fileName} is ready. Download links expire in 24h.`,
 		body,
 	});
 }
