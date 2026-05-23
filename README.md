@@ -6,7 +6,7 @@
 
 **Studio-grade voice cleanup, in your browser.**
 
-[Try it →](https://clearmic.conflare.workers.dev)
+[Try it →](https://clearmic.conflare.dev)
 
 </div>
 
