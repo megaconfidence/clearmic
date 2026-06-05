@@ -66,6 +66,10 @@
 	"triggers": {
 		"crons": ["*/15 * * * *"]
 	},
+	// `*_DEPLOYMENT` point at always-warm Replicate deployments (min_instances >= 1)
+	// for the cold-booting community models, so predictions skip the multi-minute
+	// container start. Format "owner/deployment-name"; leave blank to fall back to
+	// the public model+version. Whisper is an official (already-warm) model — none.
 	"secrets": {
 		"required": [
 			"REPLICATE_API_TOKEN",
@@ -75,7 +79,10 @@
 			"R2_ACCOUNT_ID",
 			"R2_ACCESS_KEY_ID",
 			"R2_SECRET_ACCESS_KEY",
-			"ADMIN_PASSPHRASE"
+			"ADMIN_PASSPHRASE",
+			"SILENCE_REMOVAL_DEPLOYMENT",
+			"NOISE_REMOVAL_DEPLOYMENT",
+			"ENHANCEMENT_DEPLOYMENT"
 		]
 	},
 	"observability": {

@@ -35,7 +35,7 @@ function isTranscriptFormat(value: string): value is TranscriptFormat {
 }
 
 export function modelOptionsFromValues(presetInput: unknown, outputChoiceInput: unknown): ModelOptions | string {
-	const preset = String(presetInput ?? "medium").toLowerCase();
+	const preset = String(presetInput ?? "low").toLowerCase();
 	if (!isEnhancementPreset(preset)) {
 		return "Invalid enhancement preset.";
 	}

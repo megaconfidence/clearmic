@@ -358,7 +358,7 @@ function customMetadataValue(object: R2Object, key: string): string | null {
 	return null;
 }
 
-function normalizeEmail(value: string): string | null {
+export function normalizeEmail(value: string): string | null {
 	const email = value.trim().toLowerCase();
 	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
 }

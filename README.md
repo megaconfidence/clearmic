@@ -55,14 +55,16 @@ Drop a file, choose at least one processing step, get clean audio and/or a trans
 
 ## The engine
 
-ClearMic runs a selectable Replicate pipeline, applied in this order:
+ClearMic runs a selectable Replicate pipeline. The audio-cleaning steps apply in order:
 
 - **Silence removal** — [`nikitalokhmachev-ai/silero-vad`](https://replicate.com/nikitalokhmachev-ai/silero-vad), trims silent gaps out of the audio (outputs 16 kHz speech-quality audio)
 - **Noise removal** — [`playmore/speech-enhancer`](https://replicate.com/playmore/speech-enhancer)
 - **Enhancement** — [`resemble-ai/resemble-enhance`](https://replicate.com/resemble-ai/resemble-enhance), with Low, Medium, and High presets
 - **Transcription** — [`openai/whisper`](https://replicate.com/openai/whisper) (large-v3), with a selectable output format: plain text (`.txt`), SubRip (`.srt`), or WebVTT (`.vtt`)
 
-When multiple steps are selected, each step receives the output of the prior step. Transcription always uses the latest audio in the chain and does not change the downloadable audio.
+Each audio step receives the output of the prior one, producing a single cleaned download. **Transcription runs as a parallel branch** alongside the audio chain (so it doesn't add to the wait); it reads the silence-removed audio when silence removal is on, otherwise the original upload, so subtitle timestamps line up with the download.
+
+To avoid multi-minute cold starts, the three community models run behind always-warm Replicate **deployments** (`min_instances ≥ 1`), configured via the `*_DEPLOYMENT` secrets (`.env` in dev, `wrangler secret put` in prod). Whisper is an official always-warm model, so it has no deployment. Step advancement is idempotent (a compare-and-swap on the active prediction id), so the webhook and the status poll can never start the same step twice.
 
 ---
 
@@ -132,6 +134,7 @@ There are **no user accounts**. The expensive job-start call is gated by Turnsti
 | `POST` | `/api/uploads` | Create upload — gated by Turnstile (`cf-turnstile-response` header) + per-IP rate limit |
 | `POST` | `/api/uploads/:id/complete` | Verify upload, queue job |
 | `GET` | `/api/jobs/:id` | Job status (keyed by the opaque job id) |
+| `POST` | `/api/jobs/:id/email` | Attach a completion email after processing has started (scrubbed after sending) |
 | `GET` | `/api/jobs/:id/download?token=…` | Download clean output with job token |
 | `GET` | `/api/jobs/:id/transcript?token=…` | Download the transcript (`.txt`/`.srt`/`.vtt`) with job token |
 | `GET` | `/api/admin/stats` | Usage statistics — requires `X-Admin-Passphrase` |
@@ -139,7 +142,7 @@ There are **no user accounts**. The expensive job-start call is gated by Turnsti
 Upload body: `{ fileName, fileType, fileSize, silence_removal, noise_removal, enhance, transcribe, enhancement_preset, transcript_format, email }`
 
 - Select at least one of `silence_removal`, `noise_removal`, `enhance`, or `transcribe`
-- `enhancement_preset` — `low` (32 evaluations) · `medium` (64) · `high` (128), used when `enhance` is selected
+- `enhancement_preset` — `low` (32 evaluations, default) · `medium` (64) · `high` (128), used when `enhance` is selected
 - Enhancement always uses `solver: "Midpoint"` and `prior_temperature: 0.5`; only `number_function_evaluations` changes by preset
 - `transcript_format` — `txt` (default) · `srt` · `vtt`, used when `transcribe` is selected; controls the downloadable transcript file
 - `email` — optional; when set, 24-hour download links are emailed there and the address is **scrubbed after sending** (never stored)
@@ -198,12 +201,25 @@ npx wrangler secret put R2_ACCOUNT_ID
 npx wrangler secret put R2_ACCESS_KEY_ID
 npx wrangler secret put R2_SECRET_ACCESS_KEY
 npx wrangler secret put ADMIN_PASSPHRASE
+# Always-warm model deployments ("owner/name"); see below
+npx wrangler secret put SILENCE_REMOVAL_DEPLOYMENT
+npx wrangler secret put NOISE_REMOVAL_DEPLOYMENT
+npx wrangler secret put ENHANCEMENT_DEPLOYMENT
 ```
 
 - `EMAIL_FROM` must be a verified sender on a Cloudflare Email Service domain
 - `ADMIN_PASSPHRASE` gates the `/admin` usage dashboard — use a long random string
 - `R2_*` should be scoped to the `clearmic-audio` bucket with object read/write
 - `R2_CORS_ORIGINS` in `.env` must include every deployed frontend origin that uploads directly to R2
+
+Create the always-warm model deployments once (keeps the cold-booting community models hot), then set each `*_DEPLOYMENT` secret to the resulting `owner/name` (leave blank to fall back to the public model):
+
+```bash
+# repeat for speech-enhancer (gpu-t4) and resemble-enhance (gpu-t4)
+curl -s -X POST https://api.replicate.com/v1/deployments \
+  -H "Authorization: Bearer $REPLICATE_API_TOKEN" -H "Content-Type: application/json" \
+  -d '{"name":"silero-vad","model":"nikitalokhmachev-ai/silero-vad","version":"<version>","hardware":"cpu","min_instances":1,"max_instances":3}'
+```
 
 Migrate D1 and deploy:
 

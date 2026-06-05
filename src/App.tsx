@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PipelineOptions, PublicJob, Step } from './types';
-import { completeUpload, createUpload, getErrorMessage, getJob } from './lib/api';
+import { addJobEmail, completeUpload, createUpload, getErrorMessage, getJob } from './lib/api';
 import { useTheme } from './hooks/useTheme';
 import { useRecents } from './hooks/useRecents';
 import { useTurnstile } from './lib/turnstile';
@@ -21,7 +21,7 @@ const DEFAULT_OPTIONS: PipelineOptions = {
 	silenceRemoval: false,
 	noiseRemoval: false,
 	enhance: false,
-	enhancementPreset: 'medium',
+	enhancementPreset: 'low',
 	transcribe: false,
 	transcriptFormat: 'txt',
 	email: '',
@@ -153,6 +153,14 @@ export function App() {
 		void uploadSelectedFile();
 	}
 
+	// Attach an email after processing has started (for users who skipped it).
+	// Throws on failure so the form can surface the message.
+	async function addEmail(emailAddress: string) {
+		if (!job) return;
+		const { job: updated } = await addJobEmail(job.id, emailAddress);
+		applyJob(updated);
+	}
+
 	// ----- effects -----
 
 	useEffect(() => {
@@ -190,7 +198,7 @@ export function App() {
 						/>
 					)}
 
-					{step === 'processing' && job && <ProcessingStep job={job} busy={busy} onReset={resetFlow} />}
+					{step === 'processing' && job && <ProcessingStep job={job} busy={busy} onReset={resetFlow} onAddEmail={addEmail} />}
 
 					<ErrorBanner message={error} />
 				</section>

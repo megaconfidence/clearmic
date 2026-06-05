@@ -66,5 +66,11 @@ export const completeUpload = (uploadId: string) =>
 
 export const getJob = (jobId: string) => api<JobResponse>(`/api/jobs/${encodeURIComponent(jobId)}`);
 
+export const addJobEmail = (jobId: string, email: string) =>
+	api<JobResponse>(`/api/jobs/${encodeURIComponent(jobId)}/email`, {
+		method: 'POST',
+		body: JSON.stringify({ email }),
+	});
+
 export const getAdminStats = (passphrase: string) =>
 	api<AdminStats>('/api/admin/stats', { headers: { 'x-admin-passphrase': passphrase } });

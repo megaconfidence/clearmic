@@ -36,42 +36,43 @@ export function processingStepForModel(model: string): ProcessingStep | null {
 	return null;
 }
 
-export function firstSelectedProcessingStep(selection: ProcessingSelection): ProcessingStep | null {
+// Transcription is NOT part of the audio chain — it runs as a parallel branch
+// (see worker/replicate.ts). These helpers only sequence the audio-cleaning
+// steps: silence removal -> noise removal -> enhancement.
+type AudioStep = Exclude<ProcessingStep, "transcription">;
+
+export function hasAudioStep(selection: ProcessingSelection): boolean {
+	return selection.silence_removal === 1 || selection.noise_removal === 1 || selection.enhance === 1;
+}
+
+export function firstAudioStep(selection: ProcessingSelection): AudioStep | null {
 	if (selection.silence_removal === 1) {
 		return "silence_removal";
 	}
 	if (selection.noise_removal === 1) {
 		return "noise_removal";
 	}
-	if (selection.enhance === 1) {
-		return "enhancement";
-	}
-	return selection.transcribe === 1 ? "transcription" : null;
+	return selection.enhance === 1 ? "enhancement" : null;
 }
 
-export function nextSelectedProcessingStep(selection: ProcessingSelection, currentStep: ProcessingStep): ProcessingStep | null {
+export function nextAudioStep(selection: ProcessingSelection, currentStep: AudioStep): AudioStep | null {
 	if (currentStep === "silence_removal") {
 		if (selection.noise_removal === 1) {
 			return "noise_removal";
 		}
-		if (selection.enhance === 1) {
-			return "enhancement";
-		}
-		return selection.transcribe === 1 ? "transcription" : null;
+		return selection.enhance === 1 ? "enhancement" : null;
 	}
 
 	if (currentStep === "noise_removal") {
-		if (selection.enhance === 1) {
-			return "enhancement";
-		}
-		return selection.transcribe === 1 ? "transcription" : null;
-	}
-
-	if (currentStep === "enhancement") {
-		return selection.transcribe === 1 ? "transcription" : null;
+		return selection.enhance === 1 ? "enhancement" : null;
 	}
 
 	return null;
+}
+
+// The first prediction the job kicks off (audio branch if any, else transcription).
+export function firstSelectedProcessingStep(selection: ProcessingSelection): ProcessingStep | null {
+	return firstAudioStep(selection) ?? (selection.transcribe === 1 ? "transcription" : null);
 }
 
 export function processingStepLabel(step: ProcessingStep): string {

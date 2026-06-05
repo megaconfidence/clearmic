@@ -22,6 +22,7 @@ export interface PublicJob {
 	transcriptionRequested: boolean;
 	transcript: string | null;
 	transcriptFormat: TranscriptFormat;
+	emailRequested: boolean;
 	error: string | null;
 	downloadUrl: string | null;
 	transcriptUrl: string | null;

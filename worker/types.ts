@@ -38,6 +38,8 @@ export type JobRow = {
 	replicate_prediction_id: string | null;
 	replicate_get_url: string | null;
 	replicate_webhook_url: string | null;
+	transcribe_prediction_id: string | null;
+	transcribe_get_url: string | null;
 	error: string | null;
 	silence_removal: number;
 	noise_removal: number;
@@ -107,6 +109,7 @@ export type PublicJob = {
 	transcriptionRequested: boolean;
 	transcript: string | null;
 	transcriptFormat: TranscriptFormat;
+	emailRequested: boolean;
 	error: string | null;
 	downloadUrl: string | null;
 	transcriptUrl: string | null;

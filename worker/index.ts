@@ -3,7 +3,7 @@ import { cleanupExpiredData } from "./cleanup";
 import { markJobFailed } from "./db";
 import { gate } from "./gate";
 import { HttpError, getErrorMessage, json } from "./http";
-import { downloadOutput, downloadTranscript, getInputAudio, getJobStatus, receiveReplicateWebhook } from "./jobs";
+import { attachJobEmail, downloadOutput, downloadTranscript, getInputAudio, getJobStatus, receiveReplicateWebhook } from "./jobs";
 import { processQueuedJob } from "./replicate";
 import { getConfig } from "./turnstile";
 import { completeUpload, createUpload, uploadContent } from "./uploads";
@@ -107,6 +107,10 @@ async function routeRequest(request: Request, env: AppEnv): Promise<Response> {
 
 	if (action === "webhook" && request.method === "POST") {
 		return receiveReplicateWebhook(jobId, url, request, env);
+	}
+
+	if (action === "email" && request.method === "POST") {
+		return attachJobEmail(jobId, request, env);
 	}
 
 	return json({ error: "Not found" }, 404);

@@ -27,6 +27,7 @@ export function publicJob(job: JobRow, options: { includeTranscript?: boolean } 
 		transcriptionRequested: job.transcribe === 1,
 		transcript: options.includeTranscript ? job.transcript : null,
 		transcriptFormat: job.transcript_format,
+		emailRequested: job.email_on_completion === 1,
 		error: publicJobError(job.error),
 		downloadUrl:
 			job.status === "completed" && job.output_key && !isExpired(job.expires_at)
@@ -45,7 +46,15 @@ function publicProcessingStep(job: JobRow): "silence_removal" | "noise_removal" 
 		return null;
 	}
 
-	return processingStepForModel(job.model) ?? firstSelectedProcessingStep(job);
+	// Two branches can run at once; surface the audio step if active, else
+	// transcription, else the first step that will run.
+	if (job.replicate_prediction_id) {
+		return processingStepForModel(job.model) ?? firstSelectedProcessingStep(job);
+	}
+	if (job.transcribe_prediction_id) {
+		return "transcription";
+	}
+	return firstSelectedProcessingStep(job);
 }
 
 export function isExpired(expiresAt: string): boolean {

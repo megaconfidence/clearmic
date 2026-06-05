@@ -1,8 +1,9 @@
 import { cleanedFileName, escapeHeaderFilename, objectHeaders, transcriptContentType, transcriptFileName } from "./audio";
 import { getJob, isExpired, markJobFailed, publicJob } from "./db";
-import { getErrorMessage, getPublicBaseUrl, json, readJson } from "./http";
+import { getErrorMessage, getPublicBaseUrl, json, readJson, rejectDisallowedOrigin } from "./http";
 import { maybeSendCompletionEmail } from "./notifications";
-import { applyPredictionResult, syncReplicatePrediction } from "./replicate";
+import { applyPredictionResult, syncJob } from "./replicate";
+import { normalizeEmail } from "./uploads";
 import type { AppEnv, ReplicatePrediction } from "./types";
 
 // Reads are open and keyed by the job's unguessable id (auth.md A5). Whoever
@@ -14,11 +15,57 @@ export async function getJobStatus(jobId: string, request: Request, env: AppEnv)
 	}
 
 	const baseUrl = getPublicBaseUrl(request) ?? undefined;
-	if (job.status === "processing" && job.replicate_prediction_id) {
-		job = await syncReplicatePrediction(job, env, baseUrl);
+	// Reconcile both branches (audio + transcription) as a fallback to webhooks.
+	if (job.status === "queued" || job.status === "processing") {
+		try {
+			job = await syncJob(job, env, baseUrl);
+		} catch (error) {
+			console.error("Job sync failed", error);
+		}
 	}
 	if (job.status === "completed") {
 		await maybeSendCompletionEmail(job, env, baseUrl);
+	}
+
+	return json({ job: publicJob(job, { includeTranscript: true }) });
+}
+
+// Attach (or change) the completion email after processing has already started —
+// for users who skipped it on the options step. The address is stored only to
+// send the links and is scrubbed right after (see notifications.ts).
+export async function attachJobEmail(jobId: string, request: Request, env: AppEnv): Promise<Response> {
+	const originResponse = rejectDisallowedOrigin(request);
+	if (originResponse) {
+		return originResponse;
+	}
+
+	let job = await getJob(env, jobId);
+	if (!job || isExpired(job.expires_at)) {
+		return json({ error: "Job not found." }, 404);
+	}
+
+	const body = await readJson<{ email?: unknown }>(request);
+	const raw = typeof body?.email === "string" ? body.email.trim() : "";
+	const email = raw ? normalizeEmail(raw) : null;
+	if (!email) {
+		return json({ error: "Enter a valid email address." }, 400);
+	}
+
+	// Don't touch a job whose completion email already went out.
+	await env.DB.prepare(
+		`UPDATE jobs SET notify_email = ?, email_on_completion = 1, updated_at = ?
+		 WHERE id = ? AND completion_email_sent_at IS NULL`,
+	)
+		.bind(email, new Date().toISOString(), jobId)
+		.run();
+
+	job = (await getJob(env, jobId)) ?? job;
+
+	// If it already finished, send immediately (and scrub).
+	const baseUrl = getPublicBaseUrl(request) ?? undefined;
+	if (job.status === "completed") {
+		await maybeSendCompletionEmail(job, env, baseUrl);
+		job = (await getJob(env, jobId)) ?? job;
 	}
 
 	return json({ job: publicJob(job, { includeTranscript: true }) });
@@ -119,13 +166,16 @@ export async function receiveReplicateWebhook(jobId: string, url: URL, request: 
 		return json({ error: "Send webhook payload as JSON." }, 400);
 	}
 
-	if (job.replicate_prediction_id && prediction.id !== job.replicate_prediction_id) {
+	// Each prediction's webhook is tagged with its branch (audio vs transcription).
+	const branch = url.searchParams.get("branch") === "transcribe" ? "transcribe" : "audio";
+	const activePredictionId = branch === "transcribe" ? job.transcribe_prediction_id : job.replicate_prediction_id;
+	if (activePredictionId && prediction.id !== activePredictionId) {
 		return json({ job: publicJob(job) });
 	}
 
 	const baseUrl = getPublicBaseUrl(request) ?? undefined;
 	try {
-		job = await applyPredictionResult(job, prediction, env, baseUrl);
+		job = await applyPredictionResult(job, prediction, env, baseUrl, branch);
 	} catch (error) {
 		console.error("Replicate webhook processing failed", error);
 		await markJobFailed(env, job.id, getErrorMessage(error));
