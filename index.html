@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<meta name="color-scheme" content="light dark" />
+		<title>ClearMic</title>
+		<link rel="icon" type="image/svg+xml" href="/icon.svg" />
+		<link rel="apple-touch-icon" href="/icon.svg" />
+		<meta name="theme-color" content="#fafaf9" media="(prefers-color-scheme: light)" />
+		<meta name="theme-color" content="#1c1c1f" media="(prefers-color-scheme: dark)" />
+		<!-- Resolve theme before paint so the page never flashes the wrong palette.
+		     Reads explicit preference from localStorage; otherwise follows system. -->
+		<script>
+			(function () {
+				try {
+					var stored = localStorage.getItem('clearmic-theme');
+					var theme =
+						stored === 'light' || stored === 'dark'
+							? stored
+							: window.matchMedia('(prefers-color-scheme: dark)').matches
+								? 'dark'
+								: 'light';
+					document.documentElement.dataset.theme = theme;
+				} catch (e) {
+					document.documentElement.dataset.theme = 'light';
+				}
+			})();
+		</script>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link rel="preconnect" href="https://challenges.cloudflare.com" />
+		<link
+			rel="stylesheet"
+			href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+		/>
+		<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" defer></script>
+	</head>
+	<body>
+		<div id="root"></div>
+		<script type="module" src="/src/main.tsx"></script>
+	</body>
+</html>

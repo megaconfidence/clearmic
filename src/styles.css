@@ -1,0 +1,505 @@
+@import 'tailwindcss';
+
+/* =====================================================
+   ClearMic · Tailwind v4 theme
+   Design tokens live on :root (light) and are overridden on
+   :root[data-theme="dark"]. They are wired into Tailwind through
+   @theme so utilities (bg-surface, text-fg-2, rounded-lg, …) follow
+   the active theme. The theme is resolved pre-paint by an inline
+   script in index.html and toggled at runtime by the nav button.
+   ===================================================== */
+
+/* Manual dark mode driven by [data-theme="dark"] on <html>. */
+@custom-variant dark (&:where([data-theme='dark'], [data-theme='dark'] *));
+
+@theme {
+	--color-bg: var(--bg);
+	--color-surface: var(--surface);
+	--color-surface-2: var(--surface-2);
+	--color-surface-3: var(--surface-3);
+
+	--color-fg: var(--text);
+	--color-fg-2: var(--text-2);
+	--color-fg-3: var(--text-3);
+	--color-fg-4: var(--text-4);
+
+	--color-border: var(--border);
+	--color-border-2: var(--border-2);
+
+	--color-accent: var(--accent);
+	--color-accent-hover: var(--accent-hover);
+	--color-accent-soft: var(--accent-soft);
+
+	--color-ok: var(--ok);
+	--color-ok-soft: var(--ok-soft);
+	--color-err: var(--err);
+	--color-err-soft: var(--err-soft);
+	--color-amber: var(--amber);
+	--color-amber-soft: var(--amber-soft);
+
+	--font-sans: 'Inter', ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	--font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+	--radius-sm: 6px;
+	--radius-md: 8px;
+	--radius-lg: 12px;
+	--radius-xl: 16px;
+
+	--ease-smooth: cubic-bezier(0.2, 0, 0, 1);
+	--ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+	--ease-spring: cubic-bezier(0.34, 1.32, 0.64, 1);
+
+	--animate-page-in: pageIn 480ms var(--ease-out-expo) both;
+	--animate-quota-in: quotaIn 360ms var(--ease-out-expo) both;
+	--animate-step-in: stepIn 420ms var(--ease-out-expo) both;
+	--animate-chunk-in: stepChunkIn 460ms var(--ease-out-expo) both;
+	--animate-tag-in: tagIn 360ms var(--ease-out-expo) both;
+	--animate-result-in: resultIn 460ms var(--ease-out-expo) both;
+	--animate-code-in: resultIn 380ms var(--ease-out-expo) both;
+	--animate-cell-pop: cellPop 320ms var(--ease-spring) both;
+	--animate-row-in: rowIn 460ms var(--ease-out-expo) both;
+	--animate-pulse-soft: pulseSoft 1.2s ease-in-out infinite;
+}
+
+:root {
+	color-scheme: light;
+
+	--bg: #fafaf9;
+	--surface: #ffffff;
+	--surface-2: #f5f5f4;
+	--surface-3: #ebebe9;
+
+	--text: #0a0a0a;
+	--text-2: #525252;
+	--text-3: #a3a3a3;
+	--text-4: #d4d4d4;
+
+	--border: #ececeb;
+	--border-2: #dcdcda;
+
+	--accent: #373cff;
+	--accent-hover: #2a2ee8;
+	--accent-soft: #eef0ff;
+	--accent-ring: rgba(55, 60, 255, 0.16);
+
+	--ok: #16a34a;
+	--ok-soft: #ecfdf5;
+	--err: #dc2626;
+	--err-soft: #fef2f2;
+	--amber: #b45309;
+	--amber-soft: #fef3c7;
+
+	--shadow-card: 0 1px 2px rgba(15, 15, 15, 0.04), 0 4px 16px rgba(15, 15, 15, 0.04);
+
+	--mark-outline: rgba(0, 0, 0, 0.06);
+	--knob-bg: rgba(255, 255, 255, 0.55);
+	--knob-border: rgba(55, 60, 255, 0.14);
+}
+
+:root[data-theme='dark'] {
+	color-scheme: dark;
+
+	/* Lifted dark palette anchored around iOS dark levels so the page reads as
+	   "comfortable dark" rather than pure void. */
+	--bg: #1c1c1f;
+	--surface: #28282c;
+	--surface-2: #33333a;
+	--surface-3: #404048;
+
+	--text: #fafafa;
+	--text-2: #a1a1aa;
+	--text-3: #74747e;
+	--text-4: #4a4a52;
+
+	--border: #36363c;
+	--border-2: #48484f;
+
+	--accent: #5a5fff;
+	--accent-hover: #7479ff;
+	--accent-soft: rgba(90, 95, 255, 0.18);
+	--accent-ring: rgba(90, 95, 255, 0.35);
+
+	--ok: #4ade80;
+	--ok-soft: rgba(74, 222, 128, 0.16);
+	--err: #f87171;
+	--err-soft: rgba(248, 113, 113, 0.16);
+	--amber: #fbbf24;
+	--amber-soft: rgba(251, 191, 36, 0.16);
+
+	--shadow-card: 0 1px 2px rgba(0, 0, 0, 0.28), 0 8px 24px rgba(0, 0, 0, 0.22);
+
+	--mark-outline: rgba(255, 255, 255, 0.1);
+	--knob-bg: rgba(0, 0, 0, 0.24);
+	--knob-border: rgba(90, 95, 255, 0.24);
+}
+
+@layer base {
+	html {
+		-webkit-font-smoothing: antialiased;
+		-moz-osx-font-smoothing: grayscale;
+		text-rendering: optimizeLegibility;
+	}
+
+	body {
+		min-height: 100vh;
+		background: var(--bg);
+		color: var(--text);
+		font-family: var(--font-sans);
+		font-size: 14px;
+		line-height: 1.5;
+		letter-spacing: -0.005em;
+		text-wrap: pretty;
+		animation: var(--animate-page-in);
+		transition: background-color 240ms var(--ease-smooth), color 240ms var(--ease-smooth);
+	}
+
+	h1,
+	h2,
+	h3 {
+		text-wrap: balance;
+	}
+
+	::selection {
+		background: var(--accent);
+		color: #ffffff;
+	}
+
+	/* Native audio control renders dark via color-scheme; give it a subtle frame. */
+	:root[data-theme='dark'] .player {
+		background: var(--surface-2);
+	}
+}
+
+/* Staggered entrance for the children of an animated step. */
+.step-in > * {
+	animation: var(--animate-chunk-in);
+}
+.step-in > *:nth-child(1) {
+	animation-delay: 40ms;
+}
+.step-in > *:nth-child(2) {
+	animation-delay: 90ms;
+}
+.step-in > *:nth-child(3) {
+	animation-delay: 150ms;
+}
+.step-in > *:nth-child(4) {
+	animation-delay: 210ms;
+}
+.step-in > *:nth-child(5) {
+	animation-delay: 270ms;
+}
+.step-in > *:nth-child(6) {
+	animation-delay: 330ms;
+}
+
+@layer components {
+	/* ----- buttons ----- */
+	.btn {
+		display: inline-flex;
+		align-items: center;
+		justify-content: center;
+		gap: 6px;
+		padding: 10px 16px;
+		border-radius: var(--radius-md);
+		font-family: var(--font-sans);
+		font-size: 14px;
+		font-weight: 500;
+		letter-spacing: -0.005em;
+		min-height: 40px;
+		text-decoration: none;
+		transition: background-color 140ms var(--ease-smooth), color 140ms var(--ease-smooth),
+			box-shadow 140ms var(--ease-smooth), scale 140ms var(--ease-smooth);
+	}
+	.btn-block {
+		width: 100%;
+	}
+	.btn:disabled {
+		cursor: not-allowed;
+	}
+
+	.btn-primary {
+		background: var(--accent);
+		color: #ffffff;
+		box-shadow: 0 1px 0 rgba(255, 255, 255, 0.16) inset, 0 1px 2px rgba(55, 60, 255, 0.24);
+	}
+	.btn-primary:hover:not(:disabled) {
+		background: var(--accent-hover);
+	}
+	.btn-primary:focus-visible {
+		outline: 0;
+		box-shadow: 0 1px 0 rgba(255, 255, 255, 0.16) inset, 0 1px 2px rgba(55, 60, 255, 0.24), 0 0 0 3px var(--accent-ring);
+	}
+	.btn-primary:active:not(:disabled) {
+		scale: 0.96;
+	}
+	.btn-primary:disabled {
+		opacity: 0.55;
+	}
+
+	.btn-ghost {
+		background: transparent;
+		color: var(--text);
+		box-shadow: inset 0 0 0 1px var(--border-2);
+	}
+	.btn-ghost:hover:not(:disabled) {
+		background: var(--surface-2);
+	}
+	.btn-ghost:focus-visible {
+		outline: 0;
+		box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px var(--accent-ring);
+	}
+	.btn-ghost:active:not(:disabled) {
+		scale: 0.96;
+	}
+	.btn-ghost:disabled {
+		opacity: 0.5;
+	}
+
+	/* ----- icon button ----- */
+	.icon-btn {
+		position: relative;
+		width: 32px;
+		height: 32px;
+		display: grid;
+		place-items: center;
+		border-radius: var(--radius-sm);
+		color: var(--text-3);
+		flex-shrink: 0;
+		transition: background-color 140ms var(--ease-smooth), color 140ms var(--ease-smooth), scale 140ms var(--ease-smooth);
+	}
+	.icon-btn::after {
+		content: '';
+		position: absolute;
+		inset: -4px;
+	}
+	.icon-btn:hover {
+		background: var(--surface-2);
+		color: var(--text);
+	}
+	.icon-btn:active {
+		scale: 0.96;
+	}
+
+	/* ----- text link button ----- */
+	.link {
+		display: inline-flex;
+		align-items: center;
+		padding: 6px 10px;
+		border-radius: var(--radius-sm);
+		font-size: 13px;
+		font-weight: 500;
+		color: var(--text-2);
+		min-height: 32px;
+		transition: background-color 140ms var(--ease-smooth), color 140ms var(--ease-smooth);
+	}
+	.link:hover {
+		background: var(--surface-2);
+		color: var(--text);
+	}
+	.link:active {
+		scale: 0.96;
+	}
+
+	/* ----- text input ----- */
+	.input {
+		font-family: var(--font-sans);
+		font-size: 14px;
+		color: var(--text);
+		background: var(--surface);
+		border: 0;
+		border-radius: var(--radius-md);
+		padding: 11px 14px;
+		width: 100%;
+		min-height: 40px;
+		box-shadow: inset 0 0 0 1px var(--border-2);
+		transition: box-shadow 160ms var(--ease-smooth), background-color 160ms var(--ease-smooth);
+	}
+	.input::placeholder {
+		color: var(--text-3);
+	}
+	.input:hover {
+		box-shadow: inset 0 0 0 1px var(--text-3);
+	}
+	.input:focus {
+		outline: 0;
+		box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 3px var(--accent-ring);
+	}
+
+	/* ----- OTP code cell ----- */
+	.code-cell {
+		font-family: var(--font-mono);
+		font-size: 18px;
+		font-weight: 500;
+		text-align: center;
+		color: var(--text);
+		background: var(--surface);
+		border: 0;
+		border-radius: var(--radius-md);
+		height: 48px;
+		width: 100%;
+		min-width: 0;
+		box-shadow: inset 0 0 0 1px var(--border-2);
+		caret-color: var(--accent);
+		font-variant-numeric: tabular-nums;
+		transition: box-shadow 140ms var(--ease-smooth), background-color 140ms var(--ease-smooth), color 140ms var(--ease-smooth);
+	}
+	.code-cell:hover {
+		box-shadow: inset 0 0 0 1px var(--text-3);
+	}
+	.code-cell.is-filled {
+		background: var(--accent-soft);
+		color: var(--accent);
+		box-shadow: inset 0 0 0 1px var(--accent-soft);
+	}
+	.code-cell:focus {
+		outline: 0;
+		background: var(--surface);
+		color: var(--text);
+		box-shadow: inset 0 0 0 1.5px var(--accent), 0 0 0 3px var(--accent-ring);
+	}
+	.code-cell.just-filled {
+		animation: var(--animate-cell-pop);
+	}
+
+	/* ----- status badge ----- */
+	.status-badge {
+		display: inline-flex;
+		align-items: center;
+		gap: 5px;
+		padding: 3px 9px 3px 7px;
+		border-radius: 999px;
+		font-size: 11.5px;
+		font-weight: 500;
+		text-transform: capitalize;
+		background: var(--surface-3);
+		color: var(--text-2);
+		white-space: nowrap;
+		transition: background-color 320ms var(--ease-smooth), color 320ms var(--ease-smooth);
+	}
+	.status-badge .badge-dot {
+		width: 6px;
+		height: 6px;
+		border-radius: 50%;
+		background: currentColor;
+		flex-shrink: 0;
+	}
+	.status-badge[data-state='pending'],
+	.status-badge[data-state='queued'] {
+		color: var(--amber);
+		background: var(--amber-soft);
+	}
+	.status-badge[data-state='processing'] {
+		color: var(--accent);
+		background: var(--accent-soft);
+	}
+	.status-badge[data-state='processing'] .badge-dot {
+		animation: var(--animate-pulse-soft);
+	}
+	.status-badge[data-state='completed'] {
+		color: var(--ok);
+		background: var(--ok-soft);
+	}
+	.status-badge[data-state='failed'],
+	.status-badge[data-state='canceled'] {
+		color: var(--err);
+		background: var(--err-soft);
+	}
+}
+
+@keyframes pageIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes stepIn {
+	from {
+		opacity: 0;
+	}
+	to {
+		opacity: 1;
+	}
+}
+@keyframes stepChunkIn {
+	from {
+		opacity: 0;
+		transform: translateY(6px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes quotaIn {
+	from {
+		opacity: 0;
+		transform: translateY(-4px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes tagIn {
+	from {
+		opacity: 0;
+		transform: translateY(-4px) scale(0.985);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes resultIn {
+	from {
+		opacity: 0;
+		transform: translateY(8px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes cellPop {
+	0% {
+		transform: scale(1);
+	}
+	40% {
+		transform: scale(1.07);
+	}
+	100% {
+		transform: scale(1);
+	}
+}
+@keyframes rowIn {
+	from {
+		opacity: 0;
+		transform: translateY(4px);
+	}
+	to {
+		opacity: 1;
+		transform: none;
+	}
+}
+@keyframes pulseSoft {
+	0%,
+	100% {
+		opacity: 1;
+	}
+	50% {
+		opacity: 0.35;
+	}
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		transition-duration: 0.01ms !important;
+	}
+}

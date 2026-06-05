@@ -72,7 +72,7 @@ Built on the Cloudflare edge — single Worker, no backend servers.
 
 | Layer | What |
 | --- | --- |
-| Frontend | Static assets served from `public/` |
+| Frontend | React + Vite SPA (Tailwind CSS), built with the Cloudflare Vite plugin and served as static assets |
 | Runtime | Cloudflare Workers |
 | Storage | R2 (audio), D1 (sessions + job metadata) |
 | Queue | Cloudflare Queues for async job kickoff |
@@ -91,20 +91,24 @@ Browser uploads go **directly to R2** via 15-minute presigned PUT URLs, so the W
 
 | Path | What |
 | --- | --- |
-| `src/index.ts` | API router + Queue handler + cron scheduler |
-| `src/auth.ts` | Email OTP, D1 sessions |
-| `src/uploads.ts` | Direct-to-R2 upload intents, quota |
-| `src/jobs.ts` | Job status, input, webhook, download |
-| `src/replicate.ts` | Prediction lifecycle, output persistence |
-| `src/pipeline.ts` | Multi-step processing selection + sequencing |
-| `src/notifications.ts` | Completion-email rendering and dispatch |
-| `src/email-template.ts` | Shared email shell, brand mark, button helpers |
-| `src/cleanup.ts` | Scheduled deletion of expired R2 objects + D1 rows |
-| `src/r2.ts` | Presigned R2 PUT URL signing (`aws4fetch`) |
-| `src/turnstile.ts` | Turnstile siteverify |
-| `src/db.ts` | D1 helpers, public job shape |
-| `src/audio.ts`, `src/model.ts`, `src/http.ts`, `src/types.ts` | Shared helpers + types |
-| `public/index.html`, `styles.css`, `app.js` | UI |
+| `worker/index.ts` | API router + Queue handler + cron scheduler |
+| `worker/auth.ts` | Email OTP, D1 sessions |
+| `worker/uploads.ts` | Direct-to-R2 upload intents, quota |
+| `worker/jobs.ts` | Job status, input, webhook, download |
+| `worker/replicate.ts` | Prediction lifecycle, output persistence |
+| `worker/pipeline.ts` | Multi-step processing selection + sequencing |
+| `worker/notifications.ts` | Completion-email rendering and dispatch |
+| `worker/email-template.ts` | Shared email shell, brand mark, button helpers |
+| `worker/cleanup.ts` | Scheduled deletion of expired R2 objects + D1 rows |
+| `worker/r2.ts` | Presigned R2 PUT URL signing (`aws4fetch`) |
+| `worker/turnstile.ts` | Turnstile siteverify |
+| `worker/db.ts` | D1 helpers, public job shape |
+| `worker/audio.ts`, `worker/model.ts`, `worker/http.ts`, `worker/types.ts` | Shared helpers + types |
+| `index.html`, `src/main.tsx` | Vite HTML entry + React mount |
+| `src/App.tsx`, `src/components/`, `src/hooks/` | React UI — wizard steps, nav, recent library |
+| `src/lib/`, `src/types.ts` | API client, formatting helpers, shared client types |
+| `src/styles.css` | Tailwind v4 + ClearMic theme tokens (light/dark) |
+| `vite.config.ts` | Vite config (React + Cloudflare + Tailwind plugins) |
 | `public/icon.svg` | App icon (favicon + apple-touch-icon + email brand mark) |
 | `migrations/` | D1 schema |
 
@@ -147,12 +151,14 @@ Upload body: `{ fileName, fileType, fileSize, noise_removal, enhance, transcribe
 npm install
 cp .env.example .env   # fill in secrets
 npm run db:migrate:local
-npm run dev:tunnel     # public URL via Cloudflare Tunnel
+npm run dev            # Vite dev server: React HMR + the Worker (via @cloudflare/vite-plugin)
 ```
 
-Replicate fetches uploaded audio from a **public HTTPS URL**, so end-to-end processing against `localhost` won't work. Use the `dev:tunnel` URL in your browser, not `localhost`.
+`npm run dev` serves the React client and the `/api/*` Worker together on `localhost` with local bindings (D1, R2, Queues) and Turnstile test keys. `npm run build` produces the client + Worker bundles, and `npm run deploy` runs the build before `wrangler deploy`.
 
-During local tunnel development, browser uploads go through the Worker into Wrangler's local R2 simulation instead of using presigned R2 URLs. This avoids the local-R2 versus remote-R2 mismatch while still giving Replicate a public URL to fetch `/api/jobs/:id/input`. Deployed production traffic still uses direct-to-R2 uploads.
+Replicate fetches uploaded audio from a **public HTTPS URL**, so end-to-end processing against `localhost` won't complete. For a full end-to-end run, expose the dev server with a tunnel — e.g. `cloudflared tunnel --url http://localhost:5173` — and open that URL, or deploy to a `*.workers.dev` preview.
+
+During local development, browser uploads go through the Worker into Wrangler's local R2 simulation instead of using presigned R2 URLs. This avoids the local-R2 versus remote-R2 mismatch while still giving Replicate a public URL to fetch `/api/jobs/:id/input`. Deployed production traffic still uses direct-to-R2 uploads.
 
 Turnstile automatically uses Cloudflare's official always-pass test keys on `localhost`, `127.0.0.1`, and `*.trycloudflare.com`. Production hosts still use `TURNSTILE_SITE_KEY` and `TURNSTILE_SECRET_KEY` from the environment.
 

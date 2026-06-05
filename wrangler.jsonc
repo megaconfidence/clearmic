@@ -1,11 +1,16 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "clearmic",
-	"main": "src/index.ts",
+	"main": "worker/index.ts",
 	"compatibility_date": "2026-05-18",
 	"compatibility_flags": ["nodejs_compat"],
+	// The React client is built by Vite (@cloudflare/vite-plugin) and served as
+	// static assets. Unmatched routes fall back to index.html (SPA), and only
+	// /api/* is routed to the Worker first. The Vite plugin supplies the built
+	// assets directory, so it is intentionally omitted here.
 	"assets": {
-		"directory": "./public"
+		"not_found_handling": "single-page-application",
+		"run_worker_first": ["/api/*"]
 	},
 	"send_email": [
 		{

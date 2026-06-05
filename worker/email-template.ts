@@ -97,8 +97,8 @@ export function escapeAttribute(value: string): string {
 }
 
 function brandMark(origin: string | null): string {
-	// Matches the app's `.brand-mark` (public/styles.css): 22x22 circle with a hairline
-	// outline and an accent-tinted lift shadow so the email header reads like the nav.
+	// Matches the app's nav brand mark (src/components/Nav.tsx): 22x22 circle with a
+	// hairline outline and an accent-tinted lift shadow so the email header reads like the nav.
 	const shared =
 		"display:block;width:22px;height:22px;border-radius:50%;outline:1px solid rgba(0,0,0,0.06);outline-offset:-1px;box-shadow:0 1px 2px rgba(55,60,255,0.22);";
 	if (origin && /^https?:\/\//.test(origin)) {

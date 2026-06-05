@@ -1,105 +1,23 @@
-export type JobStatus = "queued" | "processing" | "completed" | "failed" | "canceled";
-export type ProcessingStep = "noise_removal" | "enhancement" | "transcription";
-export type EnhancementPreset = "low" | "medium" | "high";
-export type Solver = "Midpoint" | "RK4" | "Euler";
-export type OutputChoice = "enhanced" | "denoised";
+// Frontend-facing types. The job shape mirrors `PublicJob` returned by the
+// Worker (worker/types.ts) so the client stays in sync with the API contract.
 
-export type ProcessJobMessage = {
-	jobId: string;
-	baseUrl: string;
-};
+export type JobStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'canceled';
+export type ProcessingStep = 'noise_removal' | 'enhancement' | 'transcription';
+export type EnhancementPreset = 'low' | 'medium' | 'high';
+export type OutputChoice = 'enhanced' | 'denoised';
+export type Step = 'file' | 'options' | 'auth' | 'processing';
 
-export type AppEnv = Omit<Env, "AUDIO_QUEUE"> & {
-	AUDIO_QUEUE: Queue<ProcessJobMessage>;
-};
-
-export type User = {
+export interface User {
 	id: string;
 	email: string;
-};
+}
 
-export type OtpCodeRow = {
-	id: string;
-	code_hash: string;
-	attempts: number;
-};
+export interface Quota {
+	used: number;
+	limit: number;
+}
 
-export type ModelOptions = {
-	preset: EnhancementPreset;
-	solver: Solver;
-	numberFunctionEvaluations: number;
-	priorTemperature: number;
-	outputChoice: OutputChoice;
-};
-
-export type JobRow = {
-	id: string;
-	user_id: string | null;
-	status: JobStatus;
-	model: string;
-	input_key: string;
-	input_name: string;
-	input_content_type: string | null;
-	input_size: number;
-	output_key: string | null;
-	output_content_type: string | null;
-	email_on_completion: number;
-	completion_email_sent_at: string | null;
-	replicate_prediction_id: string | null;
-	replicate_get_url: string | null;
-	replicate_webhook_url: string | null;
-	error: string | null;
-	noise_removal: number;
-	enhance: number;
-	transcribe: number;
-	transcript: string | null;
-	preset: EnhancementPreset;
-	solver: Solver;
-	number_function_evaluations: number;
-	prior_temperature: number;
-	output_choice: OutputChoice;
-	input_token: string;
-	download_token: string;
-	webhook_token: string;
-	expires_at: string;
-};
-
-export type UploadIntentRow = {
-	id: string;
-	user_id: string;
-	input_key: string;
-	input_name: string;
-	input_content_type: string | null;
-	input_size: number;
-	email_on_completion: number;
-	noise_removal: number;
-	enhance: number;
-	transcribe: number;
-	preset: EnhancementPreset;
-	solver: Solver;
-	number_function_evaluations: number;
-	prior_temperature: number;
-	output_choice: OutputChoice;
-	input_token: string;
-	download_token: string;
-	webhook_token: string;
-	expires_at: string;
-	upload_expires_at: string;
-};
-
-export type ReplicatePrediction = {
-	id: string;
-	status: string;
-	output?: unknown;
-	error?: unknown;
-	webhook?: string;
-	urls?: {
-		get?: string;
-		web?: string;
-	};
-};
-
-export type PublicJob = {
+export interface PublicJob {
 	id: string;
 	status: JobStatus;
 	processingStep: ProcessingStep | null;
@@ -115,4 +33,44 @@ export type PublicJob = {
 	downloadUrl: string | null;
 	transcriptUrl: string | null;
 	expiresAt: string;
-};
+}
+
+export interface PipelineOptions {
+	noiseRemoval: boolean;
+	enhance: boolean;
+	enhancementPreset: EnhancementPreset;
+	transcribe: boolean;
+	emailOnCompletion: boolean;
+}
+
+export interface MeResponse {
+	user: User | null;
+	quota: Quota | null;
+}
+
+export interface JobsResponse {
+	jobs: PublicJob[];
+	quota: Quota | null;
+}
+
+export interface ConfigResponse {
+	turnstileSiteKey: string;
+}
+
+export interface UploadDescriptor {
+	id: string;
+	url: string;
+	headers: Record<string, string>;
+}
+
+export interface CreateUploadResponse {
+	upload: UploadDescriptor;
+}
+
+export interface JobResponse {
+	job: PublicJob;
+}
+
+export interface VerifyResponse {
+	user: User;
+}
