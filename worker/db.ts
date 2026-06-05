@@ -1,24 +1,5 @@
-import type { AppEnv, JobRow, PublicJob, User } from "./types";
+import type { AppEnv, JobRow, PublicJob } from "./types";
 import { firstSelectedProcessingStep, processingStepForModel } from "./pipeline";
-
-export async function getUser(env: AppEnv, userId: string): Promise<User | null> {
-	return env.DB.prepare("SELECT id, email FROM users WHERE id = ?").bind(userId).first<User>();
-}
-
-export async function getOrCreateUser(env: AppEnv, email: string): Promise<User> {
-	const existing = await env.DB.prepare("SELECT id, email FROM users WHERE email = ?").bind(email).first<User>();
-	if (existing) {
-		return existing;
-	}
-
-	const now = new Date().toISOString();
-	const userId = crypto.randomUUID();
-	await env.DB.prepare("INSERT INTO users (id, email, created_at, updated_at) VALUES (?, ?, ?, ?)")
-		.bind(userId, email, now, now)
-		.run();
-
-	return { id: userId, email };
-}
 
 export async function getJob(env: AppEnv, jobId: string): Promise<JobRow | null> {
 	return env.DB.prepare("SELECT * FROM jobs WHERE id = ?").bind(jobId).first<JobRow>();
@@ -40,10 +21,12 @@ export function publicJob(job: JobRow, options: { includeTranscript?: boolean } 
 		outputChoice: job.output_choice,
 		inputName: job.input_name,
 		inputSize: job.input_size,
+		silenceRemovalRequested: job.silence_removal === 1,
 		noiseRemovalRequested: job.noise_removal === 1,
 		enhancementRequested: job.enhance === 1,
 		transcriptionRequested: job.transcribe === 1,
 		transcript: options.includeTranscript ? job.transcript : null,
+		transcriptFormat: job.transcript_format,
 		error: publicJobError(job.error),
 		downloadUrl:
 			job.status === "completed" && job.output_key && !isExpired(job.expires_at)
@@ -57,7 +40,7 @@ export function publicJob(job: JobRow, options: { includeTranscript?: boolean } 
 	};
 }
 
-function publicProcessingStep(job: JobRow): "noise_removal" | "enhancement" | "transcription" | null {
+function publicProcessingStep(job: JobRow): "silence_removal" | "noise_removal" | "enhancement" | "transcription" | null {
 	if (job.status !== "queued" && job.status !== "processing") {
 		return null;
 	}
@@ -80,6 +63,9 @@ function publicJobError(error: string | null): string | null {
 
 	if (error.startsWith("Transcription failed")) {
 		return "Transcription failed. Please try again.";
+	}
+	if (error.startsWith("Silence removal failed")) {
+		return "Silence removal failed. Please try again.";
 	}
 	if (error.startsWith("Noise removal failed")) {
 		return "Noise removal failed. Please try again.";

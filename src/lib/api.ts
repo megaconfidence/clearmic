@@ -1,15 +1,13 @@
-import type {
-	AdminStats,
-	ConfigResponse,
-	CreateUploadResponse,
-	JobResponse,
-	JobsResponse,
-	MeResponse,
-	PipelineOptions,
-	VerifyResponse,
-} from '../types';
+import type { AdminStats, ConfigResponse, CreateUploadResponse, JobResponse, PipelineOptions } from '../types';
 
-export class ApiError extends Error {}
+export class ApiError extends Error {
+	constructor(
+		message: string,
+		readonly status = 0,
+	) {
+		super(message);
+	}
+}
 
 export function getErrorMessage(error: unknown): string {
 	if (error instanceof Error) return error.message;
@@ -28,51 +26,38 @@ async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
 	const payload = (await response.json().catch(() => ({}))) as T & { error?: string };
 
 	if (!response.ok) {
-		throw new ApiError(payload.error || 'Request failed.');
+		throw new ApiError(payload.error || 'Request failed.', response.status);
 	}
 	return payload;
 }
 
-export const getMe = () => api<MeResponse>('/api/me');
-
 export const getConfig = () => api<ConfigResponse>('/api/config');
-
-export const listJobs = () => api<JobsResponse>('/api/jobs');
-
-export const requestOtp = (email: string, turnstileToken: string) =>
-	api<Record<string, never>>('/api/auth/request-otp', {
-		method: 'POST',
-		body: JSON.stringify({ email, turnstileToken }),
-	});
-
-export const verifyOtp = (email: string, code: string) =>
-	api<VerifyResponse>('/api/auth/verify', {
-		method: 'POST',
-		body: JSON.stringify({ email, code }),
-	});
-
-export const logout = () => api<Record<string, never>>('/api/logout', { method: 'POST' });
 
 export interface CreateUploadBody {
 	fileName: string;
 	fileType: string;
 	fileSize: number;
 	options: PipelineOptions;
+	turnstileToken: string;
 }
 
-export const createUpload = ({ fileName, fileType, fileSize, options }: CreateUploadBody) =>
+export const createUpload = ({ fileName, fileType, fileSize, options, turnstileToken }: CreateUploadBody) =>
 	api<CreateUploadResponse>('/api/uploads', {
 		method: 'POST',
+		// Token travels in a header so the server reads it without consuming the body.
+		headers: { 'cf-turnstile-response': turnstileToken },
 		body: JSON.stringify({
 			fileName,
 			fileType,
 			fileSize,
+			silence_removal: options.silenceRemoval,
 			noise_removal: options.noiseRemoval,
 			enhance: options.enhance,
 			enhancement_preset: options.enhancementPreset,
 			output_choice: 'enhanced',
 			transcribe: options.transcribe,
-			email_on_completion: options.emailOnCompletion,
+			transcript_format: options.transcriptFormat,
+			email: options.email.trim(),
 		}),
 	});
 
@@ -81,4 +66,5 @@ export const completeUpload = (uploadId: string) =>
 
 export const getJob = (jobId: string) => api<JobResponse>(`/api/jobs/${encodeURIComponent(jobId)}`);
 
-export const getAdminStats = () => api<AdminStats>('/api/admin/stats');
+export const getAdminStats = (passphrase: string) =>
+	api<AdminStats>('/api/admin/stats', { headers: { 'x-admin-passphrase': passphrase } });

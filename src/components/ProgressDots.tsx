@@ -1,14 +1,13 @@
 import type { Step } from '../types';
 
-const STEPS: Step[] = ['file', 'options', 'auth', 'processing'];
+const STEPS: Step[] = ['file', 'options', 'processing'];
 
 interface ProgressDotsProps {
 	step: Step;
 	hasFile: boolean;
-	hasUser: boolean;
 }
 
-export function ProgressDots({ step, hasFile, hasUser }: ProgressDotsProps) {
+export function ProgressDots({ step, hasFile }: ProgressDotsProps) {
 	const isPastOptions = STEPS.indexOf(step) > STEPS.indexOf('options');
 
 	return (
@@ -18,7 +17,6 @@ export function ProgressDots({ step, hasFile, hasUser }: ProgressDotsProps) {
 				let done = false;
 				if (name === 'file') done = hasFile;
 				else if (name === 'options') done = hasFile && isPastOptions;
-				else if (name === 'auth') done = hasUser;
 				done = done && !active;
 
 				return (

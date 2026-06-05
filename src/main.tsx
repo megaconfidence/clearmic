@@ -2,6 +2,7 @@ import './styles.css';
 import { createRoot } from 'react-dom/client';
 import { App } from './App';
 import { Admin } from './pages/Admin';
+import { TurnstileProvider } from './lib/turnstile';
 
 const container = document.getElementById('root');
 if (!container) {
@@ -13,4 +14,12 @@ if (!container) {
 const path = window.location.pathname.replace(/\/+$/, '');
 const isAdmin = path === '/admin';
 
-createRoot(container).render(isAdmin ? <Admin /> : <App />);
+createRoot(container).render(
+	isAdmin ? (
+		<Admin />
+	) : (
+		<TurnstileProvider>
+			<App />
+		</TurnstileProvider>
+	),
+);

@@ -1,13 +1,16 @@
 import { getAdminStats } from "./admin";
 import { cleanupExpiredData } from "./cleanup";
-import { getCurrentUser, getMe, logout, requestOtp, unauthorized, verifyOtp } from "./auth";
 import { markJobFailed } from "./db";
+import { gate } from "./gate";
 import { HttpError, getErrorMessage, json } from "./http";
-import { downloadOutput, downloadTranscript, getInputAudio, getJobStatus, listJobs, receiveReplicateWebhook } from "./jobs";
+import { downloadOutput, downloadTranscript, getInputAudio, getJobStatus, receiveReplicateWebhook } from "./jobs";
 import { processQueuedJob } from "./replicate";
 import { getConfig } from "./turnstile";
 import { completeUpload, createUpload, uploadContent } from "./uploads";
 import type { AppEnv, ProcessJobMessage } from "./types";
+
+// Durable Object class must be re-exported from the Worker's entry module.
+export { RateLimiter } from "./rate-limiter";
 
 export default {
 	async fetch(request: Request, env: AppEnv): Promise<Response> {
@@ -56,49 +59,26 @@ async function routeRequest(request: Request, env: AppEnv): Promise<Response> {
 		return getConfig(request, env);
 	}
 
-	// Public admin usage stats (no auth gate for now).
+	// Admin usage stats — behind a shared passphrase (auth.md Part B).
 	if (request.method === "GET" && url.pathname === "/api/admin/stats") {
-		return getAdminStats(env);
+		return getAdminStats(request, env);
 	}
 
-	if (request.method === "POST" && url.pathname === "/api/auth/request-otp") {
-		return requestOtp(request, env);
-	}
-
-	if (request.method === "POST" && url.pathname === "/api/auth/verify") {
-		return verifyOtp(request, env);
-	}
-
-	if (request.method === "GET" && url.pathname === "/api/me") {
-		return getMe(request, env);
-	}
-
-	if (request.method === "POST" && url.pathname === "/api/logout") {
-		return logout(request, env);
-	}
-
-	const user = await getCurrentUser(request, env);
-
-	if (request.method === "GET" && url.pathname === "/api/jobs") {
-		if (!user) return unauthorized();
-		return listJobs(env, user);
-	}
-
+	// Starting a job is the expensive, abusable action: gate it with the bot
+	// check + per-IP rate limit. Everything after is keyed by an opaque id.
 	if (request.method === "POST" && url.pathname === "/api/uploads") {
-		if (!user) return unauthorized();
-		return createUpload(request, env, user);
+		const turnstileToken = request.headers.get("cf-turnstile-response");
+		return gate(request, env, turnstileToken, () => createUpload(request, env));
 	}
 
 	const uploadMatch = /^\/api\/uploads\/([^/]+)\/complete$/.exec(url.pathname);
 	if (uploadMatch && request.method === "POST") {
-		if (!user) return unauthorized();
-		return completeUpload(decodeURIComponent(uploadMatch[1]), request, env, user);
+		return completeUpload(decodeURIComponent(uploadMatch[1]), request, env);
 	}
 
 	const uploadContentMatch = /^\/api\/uploads\/([^/]+)\/content$/.exec(url.pathname);
 	if (uploadContentMatch && request.method === "PUT") {
-		if (!user) return unauthorized();
-		return uploadContent(decodeURIComponent(uploadContentMatch[1]), request, env, user);
+		return uploadContent(decodeURIComponent(uploadContentMatch[1]), request, env);
 	}
 
 	const match = /^\/api\/jobs\/([^/]+)(?:\/([^/]+))?$/.exec(url.pathname);
@@ -110,8 +90,7 @@ async function routeRequest(request: Request, env: AppEnv): Promise<Response> {
 	const action = match[2];
 
 	if (!action && request.method === "GET") {
-		if (!user) return unauthorized();
-		return getJobStatus(jobId, request, env, user);
+		return getJobStatus(jobId, request, env);
 	}
 
 	if (action === "input" && request.method === "GET") {

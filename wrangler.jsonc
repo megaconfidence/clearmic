@@ -32,6 +32,21 @@
 			"migrations_dir": "migrations"
 		}
 	],
+	// Per-IP sliding-window rate limiter for the public job-start endpoint.
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "RATE_LIMITER",
+				"class_name": "RateLimiter"
+			}
+		]
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_sqlite_classes": ["RateLimiter"]
+		}
+	],
 	"queues": {
 		"producers": [
 			{
@@ -59,7 +74,8 @@
 			"TURNSTILE_SECRET_KEY",
 			"R2_ACCOUNT_ID",
 			"R2_ACCESS_KEY_ID",
-			"R2_SECRET_ACCESS_KEY"
+			"R2_SECRET_ACCESS_KEY",
+			"ADMIN_PASSPHRASE"
 		]
 	},
 	"observability": {

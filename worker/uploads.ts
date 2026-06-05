@@ -1,31 +1,27 @@
 import { MAX_UPLOAD_BYTES, formatBytes, isAudioUpload, randomToken, sanitizeFileName } from "./audio";
 import { getJob, isExpired, markJobFailed, publicJob } from "./db";
 import { getErrorMessage, getPublicBaseUrl, isLocalDevHost, json, readJson, rejectDisallowedOrigin } from "./http";
-import { modelOptionsFromValues } from "./model";
+import { modelOptionsFromValues, transcriptFormatFromValue } from "./model";
 import { firstSelectedProcessingStep, modelForProcessingStep } from "./pipeline";
 import { createPresignedPutUrl } from "./r2";
-import type { AppEnv, UploadIntentRow, User } from "./types";
+import type { AppEnv, UploadIntentRow } from "./types";
 
 const UPLOAD_URL_TTL_SECONDS = 15 * 60;
-const DAILY_WINDOW_MS = 24 * 60 * 60 * 1000;
-const DAILY_JOB_LIMIT = 10;
 const UPLOAD_ID_METADATA_HEADER = "X-Amz-Meta-Clearmic-Upload-Id";
 const UPLOAD_SIZE_METADATA_HEADER = "X-Amz-Meta-Clearmic-Expected-Size";
-
-export async function getDailyJobUsage(env: AppEnv, user: User): Promise<{ used: number; limit: number }> {
-	return { used: Math.min(await countDailyUsage(env, user, true), DAILY_JOB_LIMIT), limit: DAILY_JOB_LIMIT };
-}
 
 type UploadRequest = {
 	fileName?: unknown;
 	fileType?: unknown;
 	fileSize?: unknown;
+	silence_removal?: unknown;
 	noise_removal?: unknown;
 	enhance?: unknown;
 	enhancement_preset?: unknown;
 	output_choice?: unknown;
 	transcribe?: unknown;
-	email_on_completion?: unknown;
+	transcript_format?: unknown;
+	email?: unknown;
 };
 
 type UploadMetadata = {
@@ -34,7 +30,7 @@ type UploadMetadata = {
 	fileSize: number;
 };
 
-export async function createUpload(request: Request, env: AppEnv, user: User): Promise<Response> {
+export async function createUpload(request: Request, env: AppEnv): Promise<Response> {
 	if (!env.REPLICATE_API_TOKEN) {
 		return json({ error: "Missing REPLICATE_API_TOKEN secret." }, 500);
 	}
@@ -45,10 +41,6 @@ export async function createUpload(request: Request, env: AppEnv, user: User): P
 	}
 
 	await cleanupExpiredUploadIntents(env).catch((error) => console.error("Expired upload cleanup failed", error));
-
-	if (!(await hasDailyUploadCapacity(env, user))) {
-		return json({ error: `Daily limit reached. You can process ${DAILY_JOB_LIMIT} files per email per day.` }, 429);
-	}
 
 	const body = await readJson<UploadRequest>(request);
 	if (!body) {
@@ -61,16 +53,30 @@ export async function createUpload(request: Request, env: AppEnv, user: User): P
 	}
 	const upload = parsedUpload.metadata;
 
+	// Optional email: used only to send the finished links, then scrubbed. Never
+	// tied to an account (there are none) and never logged.
+	const emailValue = typeof body.email === "string" ? body.email.trim() : "";
+	const notifyEmail = emailValue ? normalizeEmail(emailValue) : null;
+	if (emailValue && !notifyEmail) {
+		return json({ error: "Enter a valid email address, or leave it blank." }, 400);
+	}
+	const emailOnCompletion = notifyEmail ? 1 : 0;
+
 	const modelOptions = modelOptionsFromValues(body.enhancement_preset, body.output_choice);
 	if (typeof modelOptions === "string") {
 		return json({ error: modelOptions }, 400);
 	}
+	const silenceRemoval = booleanFromValue(body.silence_removal) ? 1 : 0;
 	const noiseRemoval = booleanFromValue(body.noise_removal) ? 1 : 0;
 	const enhance = booleanFromValue(body.enhance) ? 1 : 0;
 	const transcribe = booleanFromValue(body.transcribe) ? 1 : 0;
-	const emailOnCompletion = booleanFromValue(body.email_on_completion) ? 1 : 0;
-	if (!noiseRemoval && !enhance && !transcribe) {
+	if (!silenceRemoval && !noiseRemoval && !enhance && !transcribe) {
 		return json({ error: "Select at least one processing step." }, 400);
+	}
+
+	const transcriptFormat = transcriptFormatFromValue(body.transcript_format);
+	if (!transcriptFormat) {
+		return json({ error: "Choose a transcript format: text, SRT, or VTT." }, 400);
 	}
 
 	const now = new Date().toISOString();
@@ -83,22 +89,24 @@ export async function createUpload(request: Request, env: AppEnv, user: User): P
 
 	await env.DB.prepare(
 		`INSERT INTO upload_intents (
-			id, user_id, input_key, input_name, input_content_type, input_size,
-			email_on_completion, noise_removal, enhance, transcribe, preset, solver, number_function_evaluations, prior_temperature, output_choice,
+			id, notify_email, input_key, input_name, input_content_type, input_size,
+			email_on_completion, silence_removal, noise_removal, enhance, transcribe, transcript_format, preset, solver, number_function_evaluations, prior_temperature, output_choice,
 			input_token, download_token, webhook_token, expires_at, upload_expires_at, created_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	)
 		.bind(
 			uploadId,
-			user.id,
+			notifyEmail,
 			inputKey,
 			upload.fileName,
 			inputContentType,
 			upload.fileSize,
 			emailOnCompletion,
+			silenceRemoval,
 			noiseRemoval,
 			enhance,
 			transcribe,
+			transcriptFormat,
 			modelOptions.preset,
 			modelOptions.solver,
 			modelOptions.numberFunctionEvaluations,
@@ -135,7 +143,7 @@ export async function createUpload(request: Request, env: AppEnv, user: User): P
 	});
 }
 
-export async function uploadContent(uploadId: string, request: Request, env: AppEnv, user: User): Promise<Response> {
+export async function uploadContent(uploadId: string, request: Request, env: AppEnv): Promise<Response> {
 	const originResponse = rejectDisallowedOrigin(request);
 	if (originResponse) {
 		return originResponse;
@@ -147,8 +155,8 @@ export async function uploadContent(uploadId: string, request: Request, env: App
 
 	await cleanupExpiredUploadIntents(env).catch((error) => console.error("Expired upload cleanup failed", error));
 
-	const upload = await env.DB.prepare("SELECT * FROM upload_intents WHERE id = ? AND user_id = ? AND upload_expires_at > ?")
-		.bind(uploadId, user.id, new Date().toISOString())
+	const upload = await env.DB.prepare("SELECT * FROM upload_intents WHERE id = ? AND upload_expires_at > ?")
+		.bind(uploadId, new Date().toISOString())
 		.first<UploadIntentRow>();
 	if (!upload) {
 		return json({ error: "Upload not found or expired." }, 404);
@@ -177,7 +185,7 @@ export async function uploadContent(uploadId: string, request: Request, env: App
 	return json({ ok: true });
 }
 
-export async function completeUpload(uploadId: string, request: Request, env: AppEnv, user: User): Promise<Response> {
+export async function completeUpload(uploadId: string, request: Request, env: AppEnv): Promise<Response> {
 	const originResponse = rejectDisallowedOrigin(request);
 	if (originResponse) {
 		return originResponse;
@@ -185,21 +193,18 @@ export async function completeUpload(uploadId: string, request: Request, env: Ap
 
 	await cleanupExpiredUploadIntents(env).catch((error) => console.error("Expired upload cleanup failed", error));
 
+	// Idempotent: completing an already-started job (keyed by its opaque id)
+	// returns the existing job instead of creating a duplicate.
 	const existingJob = await getJob(env, uploadId);
-	if (existingJob?.user_id === user.id && !isExpired(existingJob.expires_at)) {
+	if (existingJob && !isExpired(existingJob.expires_at)) {
 		return json({ job: publicJob(existingJob) });
 	}
 
-	const upload = await env.DB.prepare("SELECT * FROM upload_intents WHERE id = ? AND user_id = ? AND upload_expires_at > ?")
-		.bind(uploadId, user.id, new Date().toISOString())
+	const upload = await env.DB.prepare("SELECT * FROM upload_intents WHERE id = ? AND upload_expires_at > ?")
+		.bind(uploadId, new Date().toISOString())
 		.first<UploadIntentRow>();
 	if (!upload) {
 		return json({ error: "Upload not found or expired." }, 404);
-	}
-
-	if (!(await hasDailyJobCapacity(env, user))) {
-		await deleteUploadIntent(env, upload);
-		return json({ error: `Daily limit reached. You can process ${DAILY_JOB_LIMIT} files per email per day.` }, 429);
 	}
 
 	const object = await env.AUDIO_BUCKET.head(upload.input_key);
@@ -215,7 +220,10 @@ export async function completeUpload(uploadId: string, request: Request, env: Ap
 
 	const baseUrl = getPublicBaseUrl(request);
 	if (!baseUrl) {
-		return json({ error: "Replicate needs a public HTTPS URL. Deploy the Worker or open the app through `npm run dev:tunnel`." }, 400);
+		return json(
+			{ error: "Replicate needs a public HTTPS URL. Deploy the Worker, or expose the dev server with a tunnel (e.g. `cloudflared tunnel --url http://localhost:5173`)." },
+			400,
+		);
 	}
 
 	const now = new Date().toISOString();
@@ -227,14 +235,14 @@ export async function completeUpload(uploadId: string, request: Request, env: Ap
 
 	await env.DB.prepare(
 		`INSERT INTO jobs (
-			id, user_id, status, model, input_key, input_name, input_content_type, input_size,
-			email_on_completion, noise_removal, enhance, transcribe, preset, solver, number_function_evaluations, prior_temperature, output_choice,
+			id, notify_email, status, model, input_key, input_name, input_content_type, input_size,
+			email_on_completion, silence_removal, noise_removal, enhance, transcribe, transcript_format, preset, solver, number_function_evaluations, prior_temperature, output_choice,
 			input_token, download_token, webhook_token, expires_at, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 	)
 		.bind(
 			upload.id,
-			user.id,
+			upload.notify_email,
 			"queued",
 			modelForProcessingStep(firstStep),
 			upload.input_key,
@@ -242,9 +250,11 @@ export async function completeUpload(uploadId: string, request: Request, env: Ap
 			upload.input_content_type,
 			upload.input_size,
 			upload.email_on_completion,
+			upload.silence_removal,
 			upload.noise_removal,
 			upload.enhance,
 			upload.transcribe,
+			upload.transcript_format,
 			upload.preset,
 			upload.solver,
 			upload.number_function_evaluations,
@@ -348,32 +358,9 @@ function customMetadataValue(object: R2Object, key: string): string | null {
 	return null;
 }
 
-async function hasDailyJobCapacity(env: AppEnv, user: User): Promise<boolean> {
-	return (await countDailyUsage(env, user, false)) < DAILY_JOB_LIMIT;
-}
-
-async function hasDailyUploadCapacity(env: AppEnv, user: User): Promise<boolean> {
-	return (await countDailyUsage(env, user, true)) < DAILY_JOB_LIMIT;
-}
-
-async function countDailyUsage(env: AppEnv, user: User, includeUploadIntents: boolean): Promise<number> {
-	const since = new Date(Date.now() - DAILY_WINDOW_MS).toISOString();
-	if (!includeUploadIntents) {
-		const row = await env.DB.prepare("SELECT COUNT(*) AS count FROM jobs WHERE user_id = ? AND created_at >= ?")
-			.bind(user.id, since)
-			.first<{ count: number }>();
-		return row?.count ?? 0;
-	}
-
-	const row = await env.DB.prepare(
-		`SELECT
-			(SELECT COUNT(*) FROM jobs WHERE user_id = ? AND created_at >= ?) +
-			(SELECT COUNT(*) FROM upload_intents WHERE user_id = ? AND created_at >= ?) AS count`,
-	)
-		.bind(user.id, since, user.id, since)
-		.first<{ count: number }>();
-
-	return row?.count ?? 0;
+function normalizeEmail(value: string): string | null {
+	const email = value.trim().toLowerCase();
+	return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : null;
 }
 
 async function cleanupExpiredUploadIntents(env: AppEnv): Promise<void> {

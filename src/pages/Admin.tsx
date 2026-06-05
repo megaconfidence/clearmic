@@ -1,11 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { ReactNode } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import type { AdminStats } from '../types';
-import { getAdminStats, getErrorMessage } from '../lib/api';
+import { ApiError, getAdminStats, getErrorMessage } from '../lib/api';
 import { formatBytes } from '../lib/format';
 import { useTheme } from '../hooks/useTheme';
 import { MoonIcon, SunIcon } from '../components/icons';
 import { ErrorBanner } from '../components/ErrorBanner';
+
+// The passphrase IS the credential (auth.md Part B). Persist it so the operator
+// stays unlocked across restarts; clear it on a 401 (e.g. the secret rotated).
+const PASS_KEY = 'clearmic.admin.passphrase';
 
 function Stat({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
 	return (
@@ -49,25 +53,72 @@ function UsageBar({ label, count, total }: { label: string; count: number; total
 
 export function Admin() {
 	const { theme, toggle } = useTheme();
+	const [passphrase, setPassphrase] = useState('');
+	const [unlocked, setUnlocked] = useState(false);
 	const [stats, setStats] = useState<AdminStats | null>(null);
 	const [error, setError] = useState('');
-	const [loading, setLoading] = useState(true);
+	const [loading, setLoading] = useState(false);
 
-	const load = useCallback(async () => {
+	const load = useCallback(async (pass: string) => {
 		setLoading(true);
 		setError('');
 		try {
-			setStats(await getAdminStats());
+			const data = await getAdminStats(pass);
+			setStats(data);
+			setUnlocked(true);
+			try {
+				localStorage.setItem(PASS_KEY, pass);
+			} catch {
+				// localStorage unavailable — operator just re-enters next time.
+			}
 		} catch (err) {
-			setError(getErrorMessage(err));
+			if (err instanceof ApiError && err.status === 401) {
+				setUnlocked(false);
+				setStats(null);
+				try {
+					localStorage.removeItem(PASS_KEY);
+				} catch {
+					// ignore
+				}
+				setError('Incorrect or expired passphrase.');
+			} else {
+				setError(getErrorMessage(err));
+			}
 		} finally {
 			setLoading(false);
 		}
 	}, []);
 
 	useEffect(() => {
-		void load();
+		let stored = '';
+		try {
+			stored = localStorage.getItem(PASS_KEY) || '';
+		} catch {
+			stored = '';
+		}
+		if (stored) {
+			setPassphrase(stored);
+			void load(stored);
+		}
 	}, [load]);
+
+	function onSubmit(event: FormEvent) {
+		event.preventDefault();
+		const value = passphrase.trim();
+		if (value) void load(value);
+	}
+
+	function lock() {
+		try {
+			localStorage.removeItem(PASS_KEY);
+		} catch {
+			// ignore
+		}
+		setUnlocked(false);
+		setStats(null);
+		setPassphrase('');
+		setError('');
+	}
 
 	const allTime = stats?.allTime;
 	const live = stats?.live;
@@ -93,6 +144,11 @@ export function Admin() {
 					<button className="icon-btn" type="button" aria-label="Switch theme" title="Switch theme" onClick={toggle}>
 						{theme === 'dark' ? <MoonIcon className="h-[15px] w-[15px]" /> : <SunIcon className="h-[15px] w-[15px]" />}
 					</button>
+					{unlocked && (
+						<button className="link" type="button" onClick={lock}>
+							Lock
+						</button>
+					)}
 					<a className="link" href="/">
 						Back to app
 					</a>
@@ -100,84 +156,114 @@ export function Admin() {
 			</header>
 
 			<main className="mx-auto max-w-[960px] px-6 pb-20 max-[480px]:px-5">
-				<div className="mb-6 flex items-end justify-between gap-3">
-					<div>
-						<h1 className="text-[22px] font-semibold tracking-[-0.02em] text-fg">Usage</h1>
-						<p className="mt-1 text-xs text-fg-3">
-							{stats ? `Updated ${new Date(stats.generatedAt).toLocaleString()}` : 'Loading…'}
-							{since ? ` · tracking since ${since}` : ''}
-						</p>
-						<p className="mt-0.5 text-xs text-fg-3">Totals are kept forever, even after audio is deleted at 24h.</p>
+				{!unlocked ? (
+					<div className="mx-auto mt-[10vh] max-w-[360px]">
+						<div className="rounded-xl border border-border bg-surface p-7 shadow-[var(--shadow-card)]">
+							<h1 className="text-[19px] font-semibold tracking-[-0.015em] text-fg">Admin access</h1>
+							<p className="mt-1.5 text-xs leading-normal text-fg-3">Enter the operator passphrase to view usage stats.</p>
+							<form className="mt-5 flex flex-col gap-3" onSubmit={onSubmit}>
+								<input
+									className="input"
+									type="password"
+									name="admin-passphrase"
+									autoComplete="current-password"
+									placeholder="Passphrase"
+									value={passphrase}
+									onChange={(e) => setPassphrase(e.target.value)}
+									autoFocus
+								/>
+								<button className="btn btn-primary btn-block" type="submit" disabled={loading || !passphrase.trim()}>
+									{loading ? 'Checking…' : 'Unlock'}
+								</button>
+							</form>
+							<div className="mt-4">
+								<ErrorBanner message={error} />
+							</div>
+						</div>
 					</div>
-					<button className="btn btn-ghost" type="button" onClick={() => void load()} disabled={loading}>
-						{loading ? 'Refreshing…' : 'Refresh'}
-					</button>
-				</div>
-
-				<ErrorBanner message={error} />
-
-				{stats && allTime && live && (
-					<div className="flex flex-col gap-8 animate-step-in">
-						<section>
-							<SectionTitle>Overview</SectionTitle>
-							<div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
-								<Stat label="Total users" value={stats.users.total} sub={`+${stats.users.new24h} today · +${stats.users.new7d} this week`} />
-								<Stat label="Jobs all-time" value={allTime.jobs} sub={`${live.jobs} active now`} />
-								<Stat label="Audio processed" value={formatBytes(allTime.inputBytes)} sub="all-time input" />
-								<Stat label="Active sessions" value={stats.sessions.active} sub="signed-in devices" />
+				) : (
+					<>
+						<div className="mb-6 mt-2 flex items-end justify-between gap-3">
+							<div>
+								<h1 className="text-[22px] font-semibold tracking-[-0.02em] text-fg">Usage</h1>
+								<p className="mt-1 text-xs text-fg-3">
+									{stats ? `Updated ${new Date(stats.generatedAt).toLocaleString()}` : 'Loading…'}
+									{since ? ` · tracking since ${since}` : ''}
+								</p>
+								<p className="mt-0.5 text-xs text-fg-3">Totals are kept forever, even after audio is deleted at 24h.</p>
 							</div>
-						</section>
+							<button className="btn btn-ghost" type="button" onClick={() => void load(passphrase)} disabled={loading}>
+								{loading ? 'Refreshing…' : 'Refresh'}
+							</button>
+						</div>
 
-						<section>
-							<SectionTitle>Outcomes · all-time</SectionTitle>
-							<div className="grid grid-cols-3 gap-3">
-								<StatusStat label="completed" value={allTime.completed} color="text-ok" />
-								<StatusStat label="failed" value={allTime.failed} color="text-err" />
-								<StatusStat label="canceled" value={allTime.canceled} color="text-fg-2" />
-							</div>
-							<p className="mt-3 text-xs text-fg-3">
-								Completion rate <span className="font-medium tabular-nums text-fg-2">{completionRate}%</span> of {allTime.jobs} job
-								{allTime.jobs === 1 ? '' : 's'}.
-							</p>
-						</section>
+						<ErrorBanner message={error} />
 
-						<section>
-							<SectionTitle>Pipeline usage · all-time</SectionTitle>
-							<div className="flex flex-col gap-3.5 rounded-lg border border-border bg-surface p-4 shadow-[var(--shadow-card)]">
-								<UsageBar label="Noise removal" count={allTime.steps.noiseRemoval} total={allTime.jobs} />
-								<UsageBar label="Enhancement" count={allTime.steps.enhancement} total={allTime.jobs} />
-								<UsageBar label="Transcription" count={allTime.steps.transcription} total={allTime.jobs} />
-							</div>
-						</section>
+						{stats && allTime && live && (
+							<div className="flex flex-col gap-8 animate-step-in">
+								<section>
+									<SectionTitle>Overview</SectionTitle>
+									<div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
+										<Stat label="Jobs all-time" value={allTime.jobs} sub={`${live.jobs} active now`} />
+										<Stat label="Audio processed" value={formatBytes(allTime.inputBytes)} sub="all-time input" />
+										<Stat label="Completion rate" value={`${completionRate}%`} sub={`${allTime.completed} completed`} />
+										<Stat label="Pending uploads" value={stats.uploads.pending} sub="awaiting completion" />
+									</div>
+								</section>
 
-						<section>
-							<SectionTitle>Delivery &amp; data · all-time</SectionTitle>
-							<div className="grid grid-cols-2 gap-3 min-[560px]:grid-cols-3">
-								<Stat label="Email opt-in" value={allTime.emailOptIn} sub={`${optInRate}% of jobs`} />
-								<Stat label="Avg file size" value={formatBytes(allTime.avgInputBytes)} sub="per job" />
-								<Stat label="Daily limit" value={stats.dailyJobLimit} sub="jobs / user / day" />
-							</div>
-						</section>
+								<section>
+									<SectionTitle>Outcomes · all-time</SectionTitle>
+									<div className="grid grid-cols-3 gap-3">
+										<StatusStat label="completed" value={allTime.completed} color="text-ok" />
+										<StatusStat label="failed" value={allTime.failed} color="text-err" />
+										<StatusStat label="canceled" value={allTime.canceled} color="text-fg-2" />
+									</div>
+									<p className="mt-3 text-xs text-fg-3">
+										Completion rate <span className="font-medium tabular-nums text-fg-2">{completionRate}%</span> of {allTime.jobs} job
+										{allTime.jobs === 1 ? '' : 's'}.
+									</p>
+								</section>
 
-						<section>
-							<SectionTitle>Live · last 24h</SectionTitle>
-							<div className="grid grid-cols-2 gap-3 min-[560px]:grid-cols-3 min-[720px]:grid-cols-5">
-								<StatusStat label="queued" value={live.byStatus.queued} color="text-amber" />
-								<StatusStat label="processing" value={live.byStatus.processing} color="text-accent" />
-								<StatusStat label="completed" value={live.byStatus.completed} color="text-ok" />
-								<StatusStat label="failed" value={live.byStatus.failed} color="text-err" />
-								<StatusStat label="canceled" value={live.byStatus.canceled} color="text-fg-2" />
+								<section>
+									<SectionTitle>Pipeline usage · all-time</SectionTitle>
+									<div className="flex flex-col gap-3.5 rounded-lg border border-border bg-surface p-4 shadow-[var(--shadow-card)]">
+										<UsageBar label="Silence removal" count={allTime.steps.silenceRemoval} total={allTime.jobs} />
+										<UsageBar label="Noise removal" count={allTime.steps.noiseRemoval} total={allTime.jobs} />
+										<UsageBar label="Enhancement" count={allTime.steps.enhancement} total={allTime.jobs} />
+										<UsageBar label="Transcription" count={allTime.steps.transcription} total={allTime.jobs} />
+									</div>
+								</section>
+
+								<section>
+									<SectionTitle>Delivery &amp; data · all-time</SectionTitle>
+									<div className="grid grid-cols-2 gap-3 min-[560px]:grid-cols-3">
+										<Stat label="Email opt-in" value={allTime.emailOptIn} sub={`${optInRate}% of jobs`} />
+										<Stat label="Avg file size" value={formatBytes(allTime.avgInputBytes)} sub="per job" />
+										<Stat label="Rate limit" value={stats.dailyJobLimit} sub="files / IP / day" />
+									</div>
+								</section>
+
+								<section>
+									<SectionTitle>Live · last 24h</SectionTitle>
+									<div className="grid grid-cols-2 gap-3 min-[560px]:grid-cols-3 min-[720px]:grid-cols-5">
+										<StatusStat label="queued" value={live.byStatus.queued} color="text-amber" />
+										<StatusStat label="processing" value={live.byStatus.processing} color="text-accent" />
+										<StatusStat label="completed" value={live.byStatus.completed} color="text-ok" />
+										<StatusStat label="failed" value={live.byStatus.failed} color="text-err" />
+										<StatusStat label="canceled" value={live.byStatus.canceled} color="text-fg-2" />
+									</div>
+									<p className="mt-3 text-xs text-fg-3">
+										<span className="font-medium tabular-nums text-fg-2">{live.jobs}</span> active job{live.jobs === 1 ? '' : 's'} ·{' '}
+										<span className="font-medium tabular-nums text-fg-2">{stats.uploads.pending}</span> pending upload
+										{stats.uploads.pending === 1 ? '' : 's'}.
+									</p>
+								</section>
 							</div>
-							<p className="mt-3 text-xs text-fg-3">
-								<span className="font-medium tabular-nums text-fg-2">{live.jobs}</span> active job{live.jobs === 1 ? '' : 's'} ·{' '}
-								<span className="font-medium tabular-nums text-fg-2">{stats.uploads.pending}</span> pending upload
-								{stats.uploads.pending === 1 ? '' : 's'}.
-							</p>
-						</section>
-					</div>
+						)}
+
+						{loading && !stats && <p className="py-16 text-center text-sm text-fg-3">Loading usage…</p>}
+					</>
 				)}
-
-				{loading && !stats && <p className="py-16 text-center text-sm text-fg-3">Loading usage…</p>}
 			</main>
 		</div>
 	);

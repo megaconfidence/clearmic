@@ -14,7 +14,7 @@
 
 ## Noise out. Voice forward.
 
-Background hum, room reverb, street bleed, fan whine — they ruin recordings. ClearMic can remove noise, enhance speech, transcribe, or chain those steps together. No desktop apps, no plugin chains, no learning curve.
+Background hum, room reverb, street bleed, fan whine — they ruin recordings. ClearMic can trim silence, remove noise, enhance speech, transcribe, or chain those steps together. No desktop apps, no plugin chains, no learning curve.
 
 Drop a file, choose at least one processing step, get clean audio and/or a transcript back in under a minute.
 
@@ -30,35 +30,37 @@ Drop a file, choose at least one processing step, get clean audio and/or a trans
 
 |  | ClearMic | Desktop pro tools | Most online tools |
 | --- | --- | --- | --- |
-| Cost | Free, 10/day | Hundreds of dollars | Often paywalled |
-| Setup | None | Hours of plugins | Sign-up funnels |
+| Cost | Free, 30/day | Hundreds of dollars | Often paywalled |
+| Setup | None, no sign-up | Hours of plugins | Sign-up funnels |
 | Speed | Under a minute | Manual editing | Long queues |
 | Privacy | Files purge in 24h | Local-only | Stored indefinitely |
 | Access | Any browser | macOS / Windows only | Varies |
 
 ## How it works
 
-1. **Drop in audio** — WAV, MP3, M4A, FLAC, OGG. Up to 200 MB.
-2. **Clean it up** — Pick noise removal, enhancement (Low, Medium, or High strength), transcription, or any combination. Steps apply in order, top to bottom.
-3. **Verify your email** — a 6-digit code. No passwords.
-4. **Wait under a minute** — close the tab if you want, your spot is saved.
-5. **Download, or come back later** — Grab the cleaned audio and transcript right from the page. Your last 24 hours of jobs stay in the **Recent** library for one-click re-download. Opt in to email and we'll deliver 24-hour download links to your inbox the moment it's ready.
+1. **Drop in audio** — WAV, MP3, M4A, FLAC, OGG. Up to 200 MB. No sign-up.
+2. **Clean it up** — Pick silence removal, noise removal, enhancement (Low, Medium, or High strength), transcription (as plain text, SRT, or VTT), or any combination. Steps apply in order, top to bottom.
+3. **(Optional) add your email** — and we'll send the 24-hour download links to your inbox. It's used only to send those links, then discarded — your email is never stored.
+4. **Wait under a minute** — keep the tab open to watch progress.
+5. **Download, or come back later** — Grab the cleaned audio and transcript right from the page. Your recent files stay in the **Recent** list (on this device) for one-click re-download until they expire.
 
 ## Privacy by default
 
+- **No accounts, no sign-in** — nothing to create, nothing to remember
 - All audio is **automatically purged 24 hours** after upload
+- Optional email is used **only to send your download links, then discarded** — never stored
 - Only anonymous aggregate usage counts are kept long-term — never audio, filenames, or personal data
 - No tracking, no analytics, no third-party ads
-- Sessions expire after 30 days
-- 10 processing jobs per day per email — keeps costs sustainable and abuse contained
+- 30 processing jobs per day per IP — keeps costs sustainable and abuse contained
 
 ## The engine
 
-ClearMic runs a selectable Replicate pipeline:
+ClearMic runs a selectable Replicate pipeline, applied in this order:
 
+- **Silence removal** — [`nikitalokhmachev-ai/silero-vad`](https://replicate.com/nikitalokhmachev-ai/silero-vad), trims silent gaps out of the audio (outputs 16 kHz speech-quality audio)
 - **Noise removal** — [`playmore/speech-enhancer`](https://replicate.com/playmore/speech-enhancer)
 - **Enhancement** — [`resemble-ai/resemble-enhance`](https://replicate.com/resemble-ai/resemble-enhance), with Low, Medium, and High presets
-- **Transcription** — [`vaibhavs10/incredibly-fast-whisper`](https://replicate.com/vaibhavs10/incredibly-fast-whisper)
+- **Transcription** — [`openai/whisper`](https://replicate.com/openai/whisper) (large-v3), with a selectable output format: plain text (`.txt`), SubRip (`.srt`), or WebVTT (`.vtt`)
 
 When multiple steps are selected, each step receives the output of the prior step. Transcription always uses the latest audio in the chain and does not change the downloadable audio.
 
@@ -75,13 +77,14 @@ Built on the Cloudflare edge — single Worker, no backend servers.
 | --- | --- |
 | Frontend | React + Vite SPA (Tailwind CSS), built with the Cloudflare Vite plugin and served as static assets |
 | Runtime | Cloudflare Workers |
-| Storage | R2 (audio), D1 (sessions + job metadata) |
+| Storage | R2 (audio), D1 (job metadata + permanent usage rollup) |
 | Queue | Cloudflare Queues for async job kickoff |
 | Email | Cloudflare Email Service |
 | Bot check | Cloudflare Turnstile |
-| AI | Replicate (`playmore/speech-enhancer`, `resemble-ai/resemble-enhance`, `vaibhavs10/incredibly-fast-whisper`) |
+| Rate limit | Durable Object — per-IP sliding window |
+| AI | Replicate (`nikitalokhmachev-ai/silero-vad`, `playmore/speech-enhancer`, `resemble-ai/resemble-enhance`, `openai/whisper`) |
 
-Browser uploads go **directly to R2** via 15-minute presigned PUT URLs, so the Worker never buffers large upload bodies. The presigned URLs sign exact `Content-Type`, `Content-Length`, and custom metadata; the completion endpoint verifies the stored object before queueing. Sessions live in D1 (not KV) for stronger consistency and revocability. Replicate output URLs are validated against an allowlist of `replicate.delivery` hosts before fetching.
+There are **no user accounts**. The expensive job-start call is gated by Turnstile (bot check, fails closed) plus a per-IP sliding-window rate limit (a Durable Object, fails open); the status polls and downloads that follow stay open and are keyed by unguessable per-job ids and tokens. Browser uploads go **directly to R2** via 15-minute presigned PUT URLs, so the Worker never buffers large upload bodies. The presigned URLs sign exact `Content-Type`, `Content-Length`, and custom metadata; the completion endpoint verifies the stored object before queueing. Replicate output URLs are validated against an allowlist of `replicate.delivery` hosts before fetching.
 
 </details>
 
@@ -93,23 +96,24 @@ Browser uploads go **directly to R2** via 15-minute presigned PUT URLs, so the W
 | Path | What |
 | --- | --- |
 | `worker/index.ts` | API router + Queue handler + cron scheduler |
-| `worker/auth.ts` | Email OTP, D1 sessions |
-| `worker/uploads.ts` | Direct-to-R2 upload intents, quota |
+| `worker/gate.ts` | Turnstile + per-IP rate-limit gate for the job-start call |
+| `worker/rate-limiter.ts` | Per-IP sliding-window rate limiter (Durable Object) |
+| `worker/uploads.ts` | Direct-to-R2 upload intents; optional notify email |
 | `worker/jobs.ts` | Job status, input, webhook, download |
 | `worker/replicate.ts` | Prediction lifecycle, output persistence |
 | `worker/pipeline.ts` | Multi-step processing selection + sequencing |
-| `worker/notifications.ts` | Completion-email rendering and dispatch |
+| `worker/notifications.ts` | Completion-email rendering, dispatch, and address scrub |
 | `worker/email-template.ts` | Shared email shell, brand mark, button helpers |
 | `worker/cleanup.ts` | Scheduled deletion of expired R2 objects + D1 rows; archives anonymous job stats first |
-| `worker/admin.ts` | Public usage stats — persistent rollup (`usage_daily`) combined with live jobs |
+| `worker/admin.ts` | Usage stats (passphrase-gated) — persistent rollup (`usage_daily`) combined with live jobs |
 | `worker/r2.ts` | Presigned R2 PUT URL signing (`aws4fetch`) |
-| `worker/turnstile.ts` | Turnstile siteverify |
+| `worker/turnstile.ts` | Turnstile siteverify + site-key config |
 | `worker/db.ts` | D1 helpers, public job shape |
 | `worker/audio.ts`, `worker/model.ts`, `worker/http.ts`, `worker/types.ts` | Shared helpers + types |
 | `index.html`, `src/main.tsx` | Vite HTML entry + React mount |
-| `src/App.tsx`, `src/components/`, `src/hooks/` | React UI — wizard steps, nav, recent library |
-| `src/pages/Admin.tsx` | Public `/admin` usage dashboard |
-| `src/lib/`, `src/types.ts` | API client, formatting helpers, shared client types |
+| `src/App.tsx`, `src/components/`, `src/hooks/` | React UI — wizard steps, nav, device-local recent files |
+| `src/pages/Admin.tsx` | `/admin` usage dashboard (passphrase) |
+| `src/lib/` | API client, formatting helpers, shared Turnstile provider |
 | `src/styles.css` | Tailwind v4 + ClearMic theme tokens (light/dark) |
 | `vite.config.ts` | Vite config (React + Cloudflare + Tailwind plugins) |
 | `public/icon.svg` | App icon (favicon + apple-touch-icon + email brand mark) |
@@ -124,25 +128,21 @@ Browser uploads go **directly to R2** via 15-minute presigned PUT URLs, so the W
 
 | Method | Path | What |
 | --- | --- | --- |
-| `POST` | `/api/auth/request-otp` | Send email login code |
-| `POST` | `/api/auth/verify` | Verify code, set session cookie |
-| `GET` | `/api/me` | Current user + remaining quota |
-| `POST` | `/api/logout` | Clear session |
 | `GET` | `/api/config` | Public Turnstile site key |
-| `POST` | `/api/uploads` | Create presigned R2 upload |
+| `POST` | `/api/uploads` | Create upload — gated by Turnstile (`cf-turnstile-response` header) + per-IP rate limit |
 | `POST` | `/api/uploads/:id/complete` | Verify upload, queue job |
-| `GET` | `/api/jobs` | List active jobs + quota |
-| `GET` | `/api/jobs/:id` | Job status |
+| `GET` | `/api/jobs/:id` | Job status (keyed by the opaque job id) |
 | `GET` | `/api/jobs/:id/download?token=…` | Download clean output with job token |
-| `GET` | `/api/jobs/:id/transcript?token=…` | Download transcript text with job token |
-| `GET` | `/api/admin/stats` | Public usage statistics, retained forever (no auth yet) |
+| `GET` | `/api/jobs/:id/transcript?token=…` | Download the transcript (`.txt`/`.srt`/`.vtt`) with job token |
+| `GET` | `/api/admin/stats` | Usage statistics — requires `X-Admin-Passphrase` |
 
-Upload body: `{ fileName, fileType, fileSize, noise_removal, enhance, transcribe, enhancement_preset, email_on_completion }`
+Upload body: `{ fileName, fileType, fileSize, silence_removal, noise_removal, enhance, transcribe, enhancement_preset, transcript_format, email }`
 
-- Select at least one of `noise_removal`, `enhance`, or `transcribe`
+- Select at least one of `silence_removal`, `noise_removal`, `enhance`, or `transcribe`
 - `enhancement_preset` — `low` (32 evaluations) · `medium` (64) · `high` (128), used when `enhance` is selected
 - Enhancement always uses `solver: "Midpoint"` and `prior_temperature: 0.5`; only `number_function_evaluations` changes by preset
-- `email_on_completion` — optional boolean; sends 24-hour download links after the final selected step completes
+- `transcript_format` — `txt` (default) · `srt` · `vtt`, used when `transcribe` is selected; controls the downloadable transcript file
+- `email` — optional; when set, 24-hour download links are emailed there and the address is **scrubbed after sending** (never stored)
 
 </details>
 
@@ -197,9 +197,11 @@ npx wrangler secret put TURNSTILE_SECRET_KEY
 npx wrangler secret put R2_ACCOUNT_ID
 npx wrangler secret put R2_ACCESS_KEY_ID
 npx wrangler secret put R2_SECRET_ACCESS_KEY
+npx wrangler secret put ADMIN_PASSPHRASE
 ```
 
 - `EMAIL_FROM` must be a verified sender on a Cloudflare Email Service domain
+- `ADMIN_PASSPHRASE` gates the `/admin` usage dashboard — use a long random string
 - `R2_*` should be scoped to the `clearmic-audio` bucket with object read/write
 - `R2_CORS_ORIGINS` in `.env` must include every deployed frontend origin that uploads directly to R2
 
@@ -217,15 +219,16 @@ npm run deploy
 
 <br>
 
-- Turnstile validates every OTP request before email is sent
-- 10 processing jobs per email per rolling 24h window (counts queued jobs + pending uploads)
+- Turnstile validates the job-start call (**fails closed**) before any work begins
+- 30 processing jobs per IP per rolling 24h window — a Durable Object sliding window that **fails open** if the limiter is unavailable
+- The bot check runs **before** the rate limit, so a bot flood can't burn a real user's quota
 - Direct R2 uploads via 15-minute presigned URLs — Worker never buffers upload bodies
 - Upload URLs sign exact `Content-Type`, `Content-Length`, and ClearMic metadata; `/complete` re-verifies the stored object
 - Per-job random tokens guard Replicate input, webhook, and download routes
-- Completion emails only include tokenized links that expire with the job
+- Completion emails only include tokenized links that expire with the job; the address is scrubbed after sending
 - R2 lifecycle hard-deletes after 1 day; D1 `expires_at` blocks access at exactly 24h
 - R2 CORS pins browser upload origins
-- OTPs: 10 min TTL, single-use, locked after 5 wrong attempts
+- `/admin` is gated by a shared passphrase (constant-time compare, throttled 401s)
 
 </details>
 

@@ -3,8 +3,6 @@ import type { AppEnv, JobStatus, UploadIntentRow } from "./types";
 const CLEANUP_BATCH_SIZE = 100;
 
 type CleanupResult = {
-	otpCodes: number;
-	sessions: number;
 	uploadIntents: number;
 	jobs: number;
 	r2Objects: number;
@@ -16,6 +14,7 @@ type ExpiredJob = {
 	input_key: string;
 	output_key: string | null;
 	status: JobStatus;
+	silence_removal: number;
 	noise_removal: number;
 	enhance: number;
 	transcribe: number;
@@ -26,26 +25,13 @@ type ExpiredJob = {
 
 export async function cleanupExpiredData(env: AppEnv, now = new Date()): Promise<CleanupResult> {
 	const cutoff = now.toISOString();
-	const auth = await cleanupExpiredAuth(env, cutoff);
 	const uploads = await cleanupExpiredUploadIntents(env, cutoff);
 	const jobs = await cleanupExpiredJobs(env, cutoff);
 
 	return {
-		otpCodes: auth.otpCodes,
-		sessions: auth.sessions,
 		uploadIntents: uploads.uploadIntents,
 		jobs: jobs.jobs,
 		r2Objects: uploads.r2Objects + jobs.r2Objects,
-	};
-}
-
-async function cleanupExpiredAuth(env: AppEnv, cutoff: string): Promise<Pick<CleanupResult, "otpCodes" | "sessions">> {
-	const otpCodes = await env.DB.prepare("DELETE FROM otp_codes WHERE expires_at <= ? OR consumed_at IS NOT NULL").bind(cutoff).run();
-	const sessions = await env.DB.prepare("DELETE FROM sessions WHERE expires_at <= ?").bind(cutoff).run();
-
-	return {
-		otpCodes: changedRows(otpCodes),
-		sessions: changedRows(sessions),
 	};
 }
 
@@ -72,7 +58,7 @@ async function cleanupExpiredUploadIntents(
 
 async function cleanupExpiredJobs(env: AppEnv, cutoff: string): Promise<Pick<CleanupResult, "jobs" | "r2Objects">> {
 	const { results } = await env.DB.prepare(
-		`SELECT id, input_key, output_key, status, noise_removal, enhance, transcribe, email_on_completion, input_size, created_at
+		`SELECT id, input_key, output_key, status, silence_removal, noise_removal, enhance, transcribe, email_on_completion, input_size, created_at
 		 FROM jobs WHERE expires_at <= ? LIMIT ?`,
 	)
 		.bind(cutoff, CLEANUP_BATCH_SIZE)
@@ -101,13 +87,14 @@ async function cleanupExpiredJobs(env: AppEnv, cutoff: string): Promise<Pick<Cle
 function archiveJobStatement(env: AppEnv, job: ExpiredJob): D1PreparedStatement {
 	const day = (job.created_at || "").slice(0, 10);
 	return env.DB.prepare(
-		`INSERT INTO usage_daily (day, jobs, completed, failed, canceled, noise_removal, enhancement, transcription, email_opt_in, input_bytes)
-		 VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?)
+		`INSERT INTO usage_daily (day, jobs, completed, failed, canceled, silence_removal, noise_removal, enhancement, transcription, email_opt_in, input_bytes)
+		 VALUES (?, 1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(day) DO UPDATE SET
 			jobs = jobs + 1,
 			completed = completed + excluded.completed,
 			failed = failed + excluded.failed,
 			canceled = canceled + excluded.canceled,
+			silence_removal = silence_removal + excluded.silence_removal,
 			noise_removal = noise_removal + excluded.noise_removal,
 			enhancement = enhancement + excluded.enhancement,
 			transcription = transcription + excluded.transcription,
@@ -118,6 +105,7 @@ function archiveJobStatement(env: AppEnv, job: ExpiredJob): D1PreparedStatement 
 		job.status === "completed" ? 1 : 0,
 		job.status === "failed" ? 1 : 0,
 		job.status === "canceled" ? 1 : 0,
+		job.silence_removal === 1 ? 1 : 0,
 		job.noise_removal === 1 ? 1 : 0,
 		job.enhance === 1 ? 1 : 0,
 		job.transcribe === 1 ? 1 : 0,

@@ -1,10 +1,10 @@
-import { getUser, isExpired } from "./db";
+import { isExpired } from "./db";
 import { EMAIL_FONTS, escapeHtml, renderEmailButton, renderEmailShell } from "./email-template";
 import type { AppEnv, JobRow } from "./types";
 
 export async function maybeSendCompletionEmail(job: JobRow, env: AppEnv, baseUrl?: string): Promise<void> {
 	try {
-		if (job.status !== "completed" || job.email_on_completion !== 1 || job.completion_email_sent_at || isExpired(job.expires_at)) {
+		if (job.status !== "completed" || job.email_on_completion !== 1 || !job.notify_email || job.completion_email_sent_at || isExpired(job.expires_at)) {
 			return;
 		}
 
@@ -14,11 +14,7 @@ export async function maybeSendCompletionEmail(job: JobRow, env: AppEnv, baseUrl
 			return;
 		}
 
-		const user = job.user_id ? await getUser(env, job.user_id) : null;
-		if (!user) {
-			return;
-		}
-
+		const recipient = job.notify_email;
 		const links = completionLinks(job, origin);
 		if (!links.length) {
 			return;
@@ -39,7 +35,7 @@ export async function maybeSendCompletionEmail(job: JobRow, env: AppEnv, baseUrl
 
 		try {
 			await env.EMAIL.send({
-				to: user.email,
+				to: recipient,
 				from: env.EMAIL_FROM,
 				subject: subjectFor(fileName),
 				text: renderCompletionEmailText(fileName, links),
@@ -51,6 +47,12 @@ export async function maybeSendCompletionEmail(job: JobRow, env: AppEnv, baseUrl
 				.run();
 			throw error;
 		}
+
+		// Email delivered — scrub the address. We only ever held it to send these
+		// links; the rest of the job row is hard-deleted at 24h regardless.
+		await env.DB.prepare("UPDATE jobs SET notify_email = NULL, updated_at = ? WHERE id = ?")
+			.bind(new Date().toISOString(), job.id)
+			.run();
 	} catch (error) {
 		console.error("Completion email failed", error);
 	}

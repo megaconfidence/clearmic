@@ -5,6 +5,8 @@
 interface TurnstileRenderOptions {
 	sitekey: string;
 	theme?: 'light' | 'dark' | 'auto';
+	appearance?: 'always' | 'execute' | 'interaction-only';
+	'refresh-expired'?: 'auto' | 'manual' | 'never';
 	callback?: (token: string) => void;
 	'expired-callback'?: () => void;
 	'timeout-callback'?: () => void;

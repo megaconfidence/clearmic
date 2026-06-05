@@ -8,4 +8,10 @@ import { cloudflare } from '@cloudflare/vite-plugin';
 // `/api/*` backend share one dev server with real bindings.
 export default defineConfig({
 	plugins: [react(), cloudflare(), tailwindcss()],
+	server: {
+		// Allow reaching the dev server through a `cloudflared tunnel --url http://localhost:5173`
+		// quick tunnel. That public HTTPS host is how local dev exercises the full Replicate flow,
+		// whose webhooks and input URLs can't point at localhost.
+		allowedHosts: ['.trycloudflare.com'],
+	},
 });

@@ -1,28 +1,15 @@
-import { cleanedFileName, escapeHeaderFilename, objectHeaders, transcriptFileName } from "./audio";
+import { cleanedFileName, escapeHeaderFilename, objectHeaders, transcriptContentType, transcriptFileName } from "./audio";
 import { getJob, isExpired, markJobFailed, publicJob } from "./db";
 import { getErrorMessage, getPublicBaseUrl, json, readJson } from "./http";
 import { maybeSendCompletionEmail } from "./notifications";
 import { applyPredictionResult, syncReplicatePrediction } from "./replicate";
-import { getDailyJobUsage } from "./uploads";
-import type { AppEnv, JobRow, ReplicatePrediction, User } from "./types";
+import type { AppEnv, ReplicatePrediction } from "./types";
 
-export async function listJobs(env: AppEnv, user: User): Promise<Response> {
-	const { results } = await env.DB.prepare(
-		`SELECT * FROM jobs
-		 WHERE user_id = ? AND expires_at > ?
-		 ORDER BY created_at DESC
-		 LIMIT 50`,
-	)
-		.bind(user.id, new Date().toISOString())
-		.all<JobRow>();
-
-	const quota = await getDailyJobUsage(env, user);
-	return json({ jobs: results.map((job) => publicJob(job)), quota });
-}
-
-export async function getJobStatus(jobId: string, request: Request, env: AppEnv, user: User): Promise<Response> {
+// Reads are open and keyed by the job's unguessable id (auth.md A5). Whoever
+// created the job holds the id; no account scoping.
+export async function getJobStatus(jobId: string, request: Request, env: AppEnv): Promise<Response> {
 	let job = await getJob(env, jobId);
-	if (!job || job.user_id !== user.id || isExpired(job.expires_at)) {
+	if (!job || isExpired(job.expires_at)) {
 		return json({ error: "Job not found." }, 404);
 	}
 
@@ -106,8 +93,8 @@ export async function downloadTranscript(jobId: string, url: URL, env: AppEnv): 
 	}
 
 	const headers = new Headers({
-		"content-type": "text/plain; charset=utf-8",
-		"content-disposition": `attachment; filename="${escapeHeaderFilename(transcriptFileName(job.input_name))}"`,
+		"content-type": transcriptContentType(job.transcript_format),
+		"content-disposition": `attachment; filename="${escapeHeaderFilename(transcriptFileName(job.input_name, job.transcript_format))}"`,
 		"cache-control": "private, max-age=0, no-store",
 	});
 

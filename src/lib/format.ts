@@ -28,8 +28,29 @@ export function labelForType(mime: string, name: string): string {
 	return ext || 'audio';
 }
 
+// Pull just the spoken words out of an SRT/VTT cue list (drop header, index, and
+// timestamp lines) for a clean preview. Plain text is returned untouched.
+export function transcriptText(text: string): string {
+	const raw = String(text);
+	if (!raw.includes('-->')) {
+		return raw;
+	}
+	return raw
+		.split(/\r?\n/)
+		.filter((line) => {
+			const t = line.trim();
+			if (!t) return false;
+			if (/^WEBVTT/i.test(t)) return false;
+			if (/^NOTE\b/.test(t)) return false;
+			if (/^\d+$/.test(t)) return false;
+			if (t.includes('-->')) return false;
+			return true;
+		})
+		.join(' ');
+}
+
 export function previewTranscript(text: string, maxSentences: number): { preview: string; truncated: boolean } {
-	const trimmed = String(text).trim();
+	const trimmed = transcriptText(text).replace(/\s+/g, ' ').trim();
 	if (!trimmed) {
 		return { preview: '', truncated: false };
 	}
@@ -44,6 +65,7 @@ export function previewTranscript(text: string, maxSentences: number): { preview
 
 export function pipelineLabels(job: PublicJob): string[] {
 	const labels: string[] = [];
+	if (job.silenceRemovalRequested) labels.push('Silence');
 	if (job.noiseRemovalRequested) labels.push('Noise');
 	if (job.enhancementRequested) labels.push('Enhance');
 	if (job.transcriptionRequested) labels.push('Transcript');
@@ -66,7 +88,7 @@ export function downloadNameForJob(job: PublicJob): string {
 }
 
 export function transcriptNameForJob(job: PublicJob): string {
-	return `${safeBaseNameForJob(job)}-transcript.txt`;
+	return `${safeBaseNameForJob(job)}-transcript.${job.transcriptFormat}`;
 }
 
 export function titleForStatus(status: JobStatus | string): string {
@@ -82,6 +104,7 @@ export function subForJob(job: PublicJob, status: JobStatus | string): string {
 	if (status === 'failed') return 'Try again or pick a different file.';
 	if (status === 'canceled') return 'Nothing was processed.';
 	if (status === 'queued') return 'Lining up the engine.';
+	if (job.processingStep === 'silence_removal') return 'Trimming silent gaps with Silero VAD.';
 	if (job.processingStep === 'noise_removal') return 'Removing noise with Speech Enhancer.';
 	if (job.processingStep === 'enhancement') return 'Enhancing voice detail with Resemble.';
 	if (job.processingStep === 'transcription') return 'Transcribing the latest audio.';

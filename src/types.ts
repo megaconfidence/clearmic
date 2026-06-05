@@ -2,20 +2,11 @@
 // Worker (worker/types.ts) so the client stays in sync with the API contract.
 
 export type JobStatus = 'queued' | 'processing' | 'completed' | 'failed' | 'canceled';
-export type ProcessingStep = 'noise_removal' | 'enhancement' | 'transcription';
+export type ProcessingStep = 'silence_removal' | 'noise_removal' | 'enhancement' | 'transcription';
 export type EnhancementPreset = 'low' | 'medium' | 'high';
 export type OutputChoice = 'enhanced' | 'denoised';
-export type Step = 'file' | 'options' | 'auth' | 'processing';
-
-export interface User {
-	id: string;
-	email: string;
-}
-
-export interface Quota {
-	used: number;
-	limit: number;
-}
+export type TranscriptFormat = 'txt' | 'srt' | 'vtt';
+export type Step = 'file' | 'options' | 'processing';
 
 export interface PublicJob {
 	id: string;
@@ -25,10 +16,12 @@ export interface PublicJob {
 	outputChoice: OutputChoice;
 	inputName: string;
 	inputSize: number;
+	silenceRemovalRequested: boolean;
 	noiseRemovalRequested: boolean;
 	enhancementRequested: boolean;
 	transcriptionRequested: boolean;
 	transcript: string | null;
+	transcriptFormat: TranscriptFormat;
 	error: string | null;
 	downloadUrl: string | null;
 	transcriptUrl: string | null;
@@ -36,21 +29,15 @@ export interface PublicJob {
 }
 
 export interface PipelineOptions {
+	silenceRemoval: boolean;
 	noiseRemoval: boolean;
 	enhance: boolean;
 	enhancementPreset: EnhancementPreset;
 	transcribe: boolean;
-	emailOnCompletion: boolean;
-}
-
-export interface MeResponse {
-	user: User | null;
-	quota: Quota | null;
-}
-
-export interface JobsResponse {
-	jobs: PublicJob[];
-	quota: Quota | null;
+	transcriptFormat: TranscriptFormat;
+	// Optional. When non-empty, the finished download links are emailed here. The
+	// address is never stored beyond sending (see worker/notifications.ts).
+	email: string;
 }
 
 export interface ConfigResponse {
@@ -71,22 +58,10 @@ export interface JobResponse {
 	job: PublicJob;
 }
 
-export interface VerifyResponse {
-	user: User;
-}
-
 export interface AdminStats {
 	generatedAt: string;
 	dailyJobLimit: number;
 	statsSince: string | null;
-	users: {
-		total: number;
-		new24h: number;
-		new7d: number;
-	};
-	sessions: {
-		active: number;
-	};
 	uploads: {
 		pending: number;
 	};
@@ -106,6 +81,7 @@ export interface AdminStats {
 		failed: number;
 		canceled: number;
 		steps: {
+			silenceRemoval: number;
 			noiseRemoval: number;
 			enhancement: number;
 			transcription: number;

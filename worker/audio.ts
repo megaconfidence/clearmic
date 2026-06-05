@@ -1,3 +1,5 @@
+import type { TranscriptFormat } from "./types";
+
 export const MAX_UPLOAD_BYTES = 200 * 1024 * 1024;
 
 export function isAudioUpload(name: string, contentType: string): boolean {
@@ -20,9 +22,19 @@ export function cleanedFileName(inputName: string): string {
 	return `${base || "audio"}-cleaned.wav`;
 }
 
-export function transcriptFileName(inputName: string): string {
+export function transcriptFileName(inputName: string, format: TranscriptFormat): string {
 	const base = sanitizeFileName(inputName).replace(/\.[^.]+$/, "");
-	return `${base || "audio"}-transcript.txt`;
+	return `${base || "audio"}-transcript.${format}`;
+}
+
+export function transcriptContentType(format: TranscriptFormat): string {
+	if (format === "srt") {
+		return "application/x-subrip; charset=utf-8";
+	}
+	if (format === "vtt") {
+		return "text/vtt; charset=utf-8";
+	}
+	return "text/plain; charset=utf-8";
 }
 
 export function escapeHeaderFilename(name: string): string {

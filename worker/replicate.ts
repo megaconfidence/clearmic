@@ -7,9 +7,12 @@ import {
 	ENHANCEMENT_MODEL_VERSION,
 	NOISE_REMOVAL_MODEL,
 	NOISE_REMOVAL_MODEL_VERSION,
+	SILENCE_REMOVAL_MODEL,
+	SILENCE_REMOVAL_MODEL_VERSION,
 	TRANSCRIPTION_MODEL,
 	TRANSCRIPTION_MODEL_VERSION,
 	pickOutputUrl,
+	whisperTranscriptionArg,
 } from "./model";
 import {
 	firstSelectedProcessingStep,
@@ -128,10 +131,13 @@ async function continueAfterAudioStep(
 	}
 
 	const nextStep = nextSelectedProcessingStep(job, step);
-	if (nextStep === "enhancement") {
+	// Another audio step (silence removal / noise removal / enhancement) follows:
+	// feed this step's output straight in without persisting it as the download —
+	// only the final audio step's output becomes the cleaned file.
+	if (nextStep !== null && nextStep !== "transcription") {
 		const predictionWebhookUrl = requireWebhookUrl(job, prediction, baseUrl);
 		if (!predictionWebhookUrl) {
-			await markJobFailed(env, job.id, "Enhancement failed: missing public webhook URL.");
+			await markJobFailed(env, job.id, `${processingStepLabel(nextStep)} failed: missing public webhook URL.`);
 			return (await getJob(env, job.id)) ?? job;
 		}
 
@@ -163,15 +169,34 @@ async function createPredictionForStep(
 	job: JobRow,
 	env: AppEnv,
 ): Promise<ReplicatePrediction> {
+	if (step === "silence_removal") {
+		return createSilenceRemovalPrediction(audioUrl, webhookUrl, env);
+	}
+
 	if (step === "noise_removal") {
 		return createNoiseRemovalPrediction(audioUrl, webhookUrl, env);
 	}
 
 	if (step === "transcription") {
-		return createTranscriptionPrediction(audioUrl, webhookUrl, env);
+		return createTranscriptionPrediction(audioUrl, webhookUrl, job, env);
 	}
 
 	return createEnhancementPrediction(audioUrl, webhookUrl, job, env);
+}
+
+async function createSilenceRemovalPrediction(audioUrl: string, webhookUrl: string, env: AppEnv): Promise<ReplicatePrediction> {
+	return postReplicatePrediction(
+		SILENCE_REMOVAL_MODEL,
+		SILENCE_REMOVAL_MODEL_VERSION,
+		{
+			input_audio: audioUrl,
+			sampling_rate: 16000,
+			out_format: "wav",
+		},
+		webhookUrl,
+		env,
+		"silence removal",
+	);
 }
 
 async function createNoiseRemovalPrediction(audioUrl: string, webhookUrl: string, env: AppEnv): Promise<ReplicatePrediction> {
@@ -205,15 +230,14 @@ async function createEnhancementPrediction(audioUrl: string, webhookUrl: string,
 	);
 }
 
-async function createTranscriptionPrediction(audioUrl: string, webhookUrl: string, env: AppEnv): Promise<ReplicatePrediction> {
+async function createTranscriptionPrediction(audioUrl: string, webhookUrl: string, job: JobRow, env: AppEnv): Promise<ReplicatePrediction> {
 	return postReplicatePrediction(
 		TRANSCRIPTION_MODEL,
 		TRANSCRIPTION_MODEL_VERSION,
 		{
 			audio: audioUrl,
-			task: "transcribe",
-			language: "None",
-			batch_size: 64,
+			transcription: whisperTranscriptionArg(job.transcript_format),
+			language: "auto",
 		},
 		webhookUrl,
 		env,
@@ -387,20 +411,27 @@ function transcriptFromOutput(output: unknown): string | null {
 	}
 
 	if (typeof output === "object" && output !== null) {
-		const objectOutput = output as { text?: unknown; transcription?: unknown };
-		if (typeof objectOutput.text === "string") {
-			return normalizeTranscript(objectOutput.text);
-		}
+		// openai/whisper returns the chosen format (plain text / SRT / VTT) inline
+		// in `transcription`; `text` is kept as a defensive fallback.
+		const objectOutput = output as { transcription?: unknown; text?: unknown };
 		if (typeof objectOutput.transcription === "string") {
 			return normalizeTranscript(objectOutput.transcription);
+		}
+		if (typeof objectOutput.text === "string") {
+			return normalizeTranscript(objectOutput.text);
 		}
 	}
 
 	return null;
 }
 
+// Format-safe: preserve SRT/VTT cue line breaks, only normalize line endings and trim surrounding/trailing blank space.
 function normalizeTranscript(value: string): string | null {
-	const transcript = value.replace(/\s+/g, " ").trim();
+	const transcript = value
+		.replace(/\r\n?/g, "\n")
+		.replace(/[ \t]+$/gm, "")
+		.replace(/\n{3,}/g, "\n\n")
+		.trim();
 	return transcript || null;
 }
 

@@ -1,8 +1,9 @@
 export type JobStatus = "queued" | "processing" | "completed" | "failed" | "canceled";
-export type ProcessingStep = "noise_removal" | "enhancement" | "transcription";
+export type ProcessingStep = "silence_removal" | "noise_removal" | "enhancement" | "transcription";
 export type EnhancementPreset = "low" | "medium" | "high";
 export type Solver = "Midpoint" | "RK4" | "Euler";
 export type OutputChoice = "enhanced" | "denoised";
+export type TranscriptFormat = "txt" | "srt" | "vtt";
 
 export type ProcessJobMessage = {
 	jobId: string;
@@ -11,17 +12,6 @@ export type ProcessJobMessage = {
 
 export type AppEnv = Omit<Env, "AUDIO_QUEUE"> & {
 	AUDIO_QUEUE: Queue<ProcessJobMessage>;
-};
-
-export type User = {
-	id: string;
-	email: string;
-};
-
-export type OtpCodeRow = {
-	id: string;
-	code_hash: string;
-	attempts: number;
 };
 
 export type ModelOptions = {
@@ -34,7 +24,6 @@ export type ModelOptions = {
 
 export type JobRow = {
 	id: string;
-	user_id: string | null;
 	status: JobStatus;
 	model: string;
 	input_key: string;
@@ -43,16 +32,19 @@ export type JobRow = {
 	input_size: number;
 	output_key: string | null;
 	output_content_type: string | null;
+	notify_email: string | null;
 	email_on_completion: number;
 	completion_email_sent_at: string | null;
 	replicate_prediction_id: string | null;
 	replicate_get_url: string | null;
 	replicate_webhook_url: string | null;
 	error: string | null;
+	silence_removal: number;
 	noise_removal: number;
 	enhance: number;
 	transcribe: number;
 	transcript: string | null;
+	transcript_format: TranscriptFormat;
 	preset: EnhancementPreset;
 	solver: Solver;
 	number_function_evaluations: number;
@@ -66,15 +58,17 @@ export type JobRow = {
 
 export type UploadIntentRow = {
 	id: string;
-	user_id: string;
 	input_key: string;
 	input_name: string;
 	input_content_type: string | null;
 	input_size: number;
+	notify_email: string | null;
 	email_on_completion: number;
+	silence_removal: number;
 	noise_removal: number;
 	enhance: number;
 	transcribe: number;
+	transcript_format: TranscriptFormat;
 	preset: EnhancementPreset;
 	solver: Solver;
 	number_function_evaluations: number;
@@ -107,10 +101,12 @@ export type PublicJob = {
 	outputChoice: OutputChoice;
 	inputName: string;
 	inputSize: number;
+	silenceRemovalRequested: boolean;
 	noiseRemovalRequested: boolean;
 	enhancementRequested: boolean;
 	transcriptionRequested: boolean;
 	transcript: string | null;
+	transcriptFormat: TranscriptFormat;
 	error: string | null;
 	downloadUrl: string | null;
 	transcriptUrl: string | null;

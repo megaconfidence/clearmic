@@ -68,11 +68,11 @@ export function Library({ jobs }: { jobs: PublicJob[] }) {
 		<section className="mt-9 animate-step-in">
 			<header className="mb-1 flex items-baseline justify-between border-b border-border px-1.5 pb-3">
 				<h2 className="text-[13px] font-medium tracking-[-0.005em] text-fg-2">Recent</h2>
-				<span className="font-mono text-[11px] font-medium text-fg-3">{jobs.length} active</span>
+				<span className="font-mono text-[11px] font-medium text-fg-3">on this device</span>
 			</header>
 			<div className="flex flex-col">
 				{jobs.length === 0 ? (
-					<p className="py-7 text-center text-[13px] text-fg-3">No files yet.</p>
+					<p className="py-7 text-center text-[13px] text-fg-3">No files yet. Your recent files show up here, just on this device.</p>
 				) : (
 					jobs.map((job, index) => <JobCard key={job.id} job={job} index={index} />)
 				)}
