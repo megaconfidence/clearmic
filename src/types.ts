@@ -74,3 +74,44 @@ export interface JobResponse {
 export interface VerifyResponse {
 	user: User;
 }
+
+export interface AdminStats {
+	generatedAt: string;
+	dailyJobLimit: number;
+	statsSince: string | null;
+	users: {
+		total: number;
+		new24h: number;
+		new7d: number;
+	};
+	sessions: {
+		active: number;
+	};
+	uploads: {
+		pending: number;
+	};
+	live: {
+		jobs: number;
+		byStatus: {
+			queued: number;
+			processing: number;
+			completed: number;
+			failed: number;
+			canceled: number;
+		};
+	};
+	allTime: {
+		jobs: number;
+		completed: number;
+		failed: number;
+		canceled: number;
+		steps: {
+			noiseRemoval: number;
+			enhancement: number;
+			transcription: number;
+		};
+		emailOptIn: number;
+		inputBytes: number;
+		avgInputBytes: number;
+	};
+}

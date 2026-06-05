@@ -1,4 +1,5 @@
 import type {
+	AdminStats,
 	ConfigResponse,
 	CreateUploadResponse,
 	JobResponse,
@@ -79,3 +80,5 @@ export const completeUpload = (uploadId: string) =>
 	api<JobResponse>(`/api/uploads/${encodeURIComponent(uploadId)}/complete`, { method: 'POST' });
 
 export const getJob = (jobId: string) => api<JobResponse>(`/api/jobs/${encodeURIComponent(jobId)}`);
+
+export const getAdminStats = () => api<AdminStats>('/api/admin/stats');

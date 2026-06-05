@@ -1,3 +1,4 @@
+import { getAdminStats } from "./admin";
 import { cleanupExpiredData } from "./cleanup";
 import { getCurrentUser, getMe, logout, requestOtp, unauthorized, verifyOtp } from "./auth";
 import { markJobFailed } from "./db";
@@ -53,6 +54,11 @@ async function routeRequest(request: Request, env: AppEnv): Promise<Response> {
 
 	if (request.method === "GET" && url.pathname === "/api/config") {
 		return getConfig(request, env);
+	}
+
+	// Public admin usage stats (no auth gate for now).
+	if (request.method === "GET" && url.pathname === "/api/admin/stats") {
+		return getAdminStats(env);
 	}
 
 	if (request.method === "POST" && url.pathname === "/api/auth/request-otp") {

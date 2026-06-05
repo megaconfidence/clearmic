@@ -47,6 +47,7 @@ Drop a file, choose at least one processing step, get clean audio and/or a trans
 ## Privacy by default
 
 - All audio is **automatically purged 24 hours** after upload
+- Only anonymous aggregate usage counts are kept long-term — never audio, filenames, or personal data
 - No tracking, no analytics, no third-party ads
 - Sessions expire after 30 days
 - 10 processing jobs per day per email — keeps costs sustainable and abuse contained
@@ -99,13 +100,15 @@ Browser uploads go **directly to R2** via 15-minute presigned PUT URLs, so the W
 | `worker/pipeline.ts` | Multi-step processing selection + sequencing |
 | `worker/notifications.ts` | Completion-email rendering and dispatch |
 | `worker/email-template.ts` | Shared email shell, brand mark, button helpers |
-| `worker/cleanup.ts` | Scheduled deletion of expired R2 objects + D1 rows |
+| `worker/cleanup.ts` | Scheduled deletion of expired R2 objects + D1 rows; archives anonymous job stats first |
+| `worker/admin.ts` | Public usage stats — persistent rollup (`usage_daily`) combined with live jobs |
 | `worker/r2.ts` | Presigned R2 PUT URL signing (`aws4fetch`) |
 | `worker/turnstile.ts` | Turnstile siteverify |
 | `worker/db.ts` | D1 helpers, public job shape |
 | `worker/audio.ts`, `worker/model.ts`, `worker/http.ts`, `worker/types.ts` | Shared helpers + types |
 | `index.html`, `src/main.tsx` | Vite HTML entry + React mount |
 | `src/App.tsx`, `src/components/`, `src/hooks/` | React UI — wizard steps, nav, recent library |
+| `src/pages/Admin.tsx` | Public `/admin` usage dashboard |
 | `src/lib/`, `src/types.ts` | API client, formatting helpers, shared client types |
 | `src/styles.css` | Tailwind v4 + ClearMic theme tokens (light/dark) |
 | `vite.config.ts` | Vite config (React + Cloudflare + Tailwind plugins) |
@@ -132,6 +135,7 @@ Browser uploads go **directly to R2** via 15-minute presigned PUT URLs, so the W
 | `GET` | `/api/jobs/:id` | Job status |
 | `GET` | `/api/jobs/:id/download?token=…` | Download clean output with job token |
 | `GET` | `/api/jobs/:id/transcript?token=…` | Download transcript text with job token |
+| `GET` | `/api/admin/stats` | Public usage statistics, retained forever (no auth yet) |
 
 Upload body: `{ fileName, fileType, fileSize, noise_removal, enhance, transcribe, enhancement_preset, email_on_completion }`
 
