@@ -81,28 +81,32 @@ async function routeRequest(request: Request, env: AppEnv): Promise<Response> {
 		return uploadContent(decodeURIComponent(uploadContentMatch[1]), request, env);
 	}
 
-	const match = /^\/api\/jobs\/([^/]+)(?:\/([^/]+))?$/.exec(url.pathname);
+	const match = /^\/api\/jobs\/([^/]+)(?:\/([^/]+)(?:\/([^/]+))?)?$/.exec(url.pathname);
 	if (!match) {
 		return json({ error: "Not found" }, 404);
 	}
 
 	const jobId = decodeURIComponent(match[1]);
 	const action = match[2];
+	// Secret tokens travel as a path segment (…/download/<token>) so emailed
+	// links don't look like credential-bearing query strings to spam filters.
+	// The legacy ?token= form is still honored for links issued before this.
+	const token = match[3] ? decodeURIComponent(match[3]) : url.searchParams.get("token");
 
 	if (!action && request.method === "GET") {
 		return getJobStatus(jobId, request, env);
 	}
 
 	if (action === "input" && request.method === "GET") {
-		return getInputAudio(jobId, url, env);
+		return getInputAudio(jobId, token, env);
 	}
 
 	if (action === "download" && request.method === "GET") {
-		return downloadOutput(jobId, url, env);
+		return downloadOutput(jobId, token, env);
 	}
 
 	if (action === "transcript" && request.method === "GET") {
-		return downloadTranscript(jobId, url, env);
+		return downloadTranscript(jobId, token, env);
 	}
 
 	if (action === "webhook" && request.method === "POST") {

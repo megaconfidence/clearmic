@@ -82,14 +82,14 @@ function completionLinks(job: JobRow, origin: string): CompletionLink[] {
 	if (job.output_key) {
 		links.push({
 			label: "Download audio",
-			url: `${origin}/api/jobs/${jobId}/download?token=${token}`,
+			url: `${origin}/api/jobs/${jobId}/download/${token}`,
 		});
 	}
 
 	if (job.transcript) {
 		links.push({
 			label: "Download transcript",
-			url: `${origin}/api/jobs/${jobId}/transcript?token=${token}`,
+			url: `${origin}/api/jobs/${jobId}/transcript/${token}`,
 		});
 	}
 

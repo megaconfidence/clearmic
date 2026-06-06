@@ -71,7 +71,7 @@ export async function attachJobEmail(jobId: string, request: Request, env: AppEn
 	return json({ job: publicJob(job, { includeTranscript: true }) });
 }
 
-export async function getInputAudio(jobId: string, url: URL, env: AppEnv): Promise<Response> {
+export async function getInputAudio(jobId: string, token: string | null, env: AppEnv): Promise<Response> {
 	const job = await getJob(env, jobId);
 	if (!job) {
 		return json({ error: "Job not found." }, 404);
@@ -81,7 +81,7 @@ export async function getInputAudio(jobId: string, url: URL, env: AppEnv): Promi
 		return json({ error: "This file has expired." }, 410);
 	}
 
-	if (url.searchParams.get("token") !== job.input_token) {
+	if (token !== job.input_token) {
 		return json({ error: "Invalid input token." }, 403);
 	}
 
@@ -94,7 +94,7 @@ export async function getInputAudio(jobId: string, url: URL, env: AppEnv): Promi
 	return new Response(object.body, { headers });
 }
 
-export async function downloadOutput(jobId: string, url: URL, env: AppEnv): Promise<Response> {
+export async function downloadOutput(jobId: string, token: string | null, env: AppEnv): Promise<Response> {
 	const job = await getJob(env, jobId);
 	if (!job) {
 		return json({ error: "Job not found." }, 404);
@@ -104,7 +104,7 @@ export async function downloadOutput(jobId: string, url: URL, env: AppEnv): Prom
 		return json({ error: "This file has expired." }, 410);
 	}
 
-	if (url.searchParams.get("token") !== job.download_token) {
+	if (token !== job.download_token) {
 		return json({ error: "Invalid download token." }, 403);
 	}
 
@@ -121,7 +121,7 @@ export async function downloadOutput(jobId: string, url: URL, env: AppEnv): Prom
 	return new Response(object.body, { headers });
 }
 
-export async function downloadTranscript(jobId: string, url: URL, env: AppEnv): Promise<Response> {
+export async function downloadTranscript(jobId: string, token: string | null, env: AppEnv): Promise<Response> {
 	const job = await getJob(env, jobId);
 	if (!job) {
 		return json({ error: "Job not found." }, 404);
@@ -131,7 +131,7 @@ export async function downloadTranscript(jobId: string, url: URL, env: AppEnv): 
 		return json({ error: "This file has expired." }, 410);
 	}
 
-	if (url.searchParams.get("token") !== job.download_token) {
+	if (token !== job.download_token) {
 		return json({ error: "Invalid download token." }, 403);
 	}
 

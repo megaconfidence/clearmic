@@ -31,11 +31,11 @@ export function publicJob(job: JobRow, options: { includeTranscript?: boolean } 
 		error: publicJobError(job.error),
 		downloadUrl:
 			job.status === "completed" && job.output_key && !isExpired(job.expires_at)
-				? `/api/jobs/${encodeURIComponent(job.id)}/download?token=${encodeURIComponent(job.download_token)}`
+				? `/api/jobs/${encodeURIComponent(job.id)}/download/${encodeURIComponent(job.download_token)}`
 				: null,
 		transcriptUrl:
 			job.status === "completed" && job.transcript && !isExpired(job.expires_at)
-				? `/api/jobs/${encodeURIComponent(job.id)}/transcript?token=${encodeURIComponent(job.download_token)}`
+				? `/api/jobs/${encodeURIComponent(job.id)}/transcript/${encodeURIComponent(job.download_token)}`
 				: null,
 		expiresAt: job.expires_at,
 	};
