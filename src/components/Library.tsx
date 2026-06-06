@@ -72,7 +72,7 @@ export function Library({ jobs }: { jobs: PublicJob[] }) {
 			</header>
 			<div className="flex flex-col">
 				{jobs.length === 0 ? (
-					<p className="py-7 text-center text-[13px] text-fg-3">No files yet. Your recent files show up here, just on this device.</p>
+					<p className="py-7 text-center text-[13px] text-fg-3">Cleaned files show up here.</p>
 				) : (
 					jobs.map((job, index) => <JobCard key={job.id} job={job} index={index} />)
 				)}

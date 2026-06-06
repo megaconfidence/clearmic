@@ -69,7 +69,7 @@ export function ProcessingStep({ job, busy, onReset, onAddEmail }: ProcessingSte
 								<span className="text-xs font-medium">Transcript preview</span>
 							</div>
 							<p className="text-[12.5px] leading-[1.55] text-fg-2">{transcriptPreview.preview}</p>
-							{transcriptPreview.truncated && <p className="mt-0.5 text-xs leading-normal text-fg-3">Download the transcript below for the full text.</p>}
+							{transcriptPreview.truncated && <p className="mt-0.5 text-xs leading-normal text-fg-3">Full text in the download below.</p>}
 						</div>
 					)}
 
@@ -97,7 +97,7 @@ export function ProcessingStep({ job, busy, onReset, onAddEmail }: ProcessingSte
 			{canAddEmail &&
 				(job.emailRequested ? (
 					<p className="rounded-md bg-surface-2 px-3.5 py-2.5 text-xs leading-normal text-fg-2 shadow-[inset_0_0_0_1px_var(--border)] animate-result-in">
-						We'll email your download links the moment they're ready, then discard your address.
+						We'll email your links the moment they're ready, then forget your address.
 					</p>
 				) : (
 					<form className="flex flex-col gap-2" onSubmit={submitEmail}>
@@ -121,9 +121,7 @@ export function ProcessingStep({ job, busy, onReset, onAddEmail }: ProcessingSte
 							</button>
 						</div>
 						{emailError && <p className="text-xs leading-normal text-err">{emailError}</p>}
-						<p className="text-xs leading-normal text-fg-3">
-							We'll send your 24-hour links, then discard the address — <span className="text-fg-2">we don't store your email.</span>
-						</p>
+						<p className="text-[11px] leading-normal text-fg-3">We send the 24-hour links, then forget your address.</p>
 					</form>
 				))}
 

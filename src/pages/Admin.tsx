@@ -188,9 +188,8 @@ export function Admin() {
 								<h1 className="text-[22px] font-semibold tracking-[-0.02em] text-fg">Usage</h1>
 								<p className="mt-1 text-xs text-fg-3">
 									{stats ? `Updated ${new Date(stats.generatedAt).toLocaleString()}` : 'Loading…'}
-									{since ? ` · tracking since ${since}` : ''}
+									{since ? ` · since ${since}` : ''}
 								</p>
-								<p className="mt-0.5 text-xs text-fg-3">Totals are kept forever, even after audio is deleted at 24h.</p>
 							</div>
 							<button className="btn btn-ghost" type="button" onClick={() => void load(passphrase)} disabled={loading}>
 								{loading ? 'Refreshing…' : 'Refresh'}
@@ -218,10 +217,6 @@ export function Admin() {
 										<StatusStat label="failed" value={allTime.failed} color="text-err" />
 										<StatusStat label="canceled" value={allTime.canceled} color="text-fg-2" />
 									</div>
-									<p className="mt-3 text-xs text-fg-3">
-										Completion rate <span className="font-medium tabular-nums text-fg-2">{completionRate}%</span> of {allTime.jobs} job
-										{allTime.jobs === 1 ? '' : 's'}.
-									</p>
 								</section>
 
 								<section>
@@ -252,11 +247,6 @@ export function Admin() {
 										<StatusStat label="failed" value={live.byStatus.failed} color="text-err" />
 										<StatusStat label="canceled" value={live.byStatus.canceled} color="text-fg-2" />
 									</div>
-									<p className="mt-3 text-xs text-fg-3">
-										<span className="font-medium tabular-nums text-fg-2">{live.jobs}</span> active job{live.jobs === 1 ? '' : 's'} ·{' '}
-										<span className="font-medium tabular-nums text-fg-2">{stats.uploads.pending}</span> pending upload
-										{stats.uploads.pending === 1 ? '' : 's'}.
-									</p>
 								</section>
 							</div>
 						)}
