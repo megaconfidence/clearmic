@@ -63,15 +63,6 @@ export function previewTranscript(text: string, maxSentences: number): { preview
 	return { preview: `${preview} …`, truncated: true };
 }
 
-export function pipelineLabels(job: PublicJob): string[] {
-	const labels: string[] = [];
-	if (job.silenceRemovalRequested) labels.push('Silence');
-	if (job.noiseRemovalRequested) labels.push('Noise');
-	if (job.enhancementRequested) labels.push('Enhance');
-	if (job.transcriptionRequested) labels.push('Transcript');
-	return labels;
-}
-
 function safeBaseNameForJob(job: PublicJob): string {
 	const base = String(job.inputName || 'audio').replace(/\.[^.]+$/, '') || 'audio';
 	const safeBase = base

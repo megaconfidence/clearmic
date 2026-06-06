@@ -20,13 +20,9 @@ export function Nav({ theme, onToggleTheme }: NavProps) {
 				<span>ClearMic</span>
 			</a>
 
-			<div className="inline-flex items-center gap-3.5 max-[480px]:gap-2">
-				<span className="rounded-full bg-surface-2 px-2.5 py-[5px] text-xs font-medium text-fg-3 max-[600px]:hidden">No sign-up</span>
-
-				<button className="icon-btn" type="button" aria-label="Switch theme" title="Switch theme" onClick={onToggleTheme}>
-					{theme === 'dark' ? <MoonIcon className="h-[15px] w-[15px]" /> : <SunIcon className="h-[15px] w-[15px]" />}
-				</button>
-			</div>
+			<button className="icon-btn" type="button" aria-label="Switch theme" title="Switch theme" onClick={onToggleTheme}>
+				{theme === 'dark' ? <MoonIcon className="h-[15px] w-[15px]" /> : <SunIcon className="h-[15px] w-[15px]" />}
+			</button>
 		</nav>
 	);
 }

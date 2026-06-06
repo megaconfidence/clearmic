@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { EnhancementPreset, PipelineOptions, TranscriptFormat } from '../types';
 import { CheckIcon } from './icons';
+import { StepHeader } from './StepHeader';
 
 interface OptionsStepProps {
 	options: PipelineOptions;
@@ -104,10 +105,7 @@ export function OptionsStep({ options, onChange, onBack, onContinue, busy }: Opt
 
 	return (
 		<section className="flex flex-col gap-[18px] animate-step-in step-in">
-			<div className="flex flex-col gap-1">
-				<h1 className="text-[19px] font-semibold tracking-[-0.015em] text-fg">Clean it up</h1>
-				<p className="text-xs leading-normal text-fg-3">Pick one or more.</p>
-			</div>
+			<StepHeader title="Clean it up">Pick one or more.</StepHeader>
 
 			<div className="flex flex-col gap-2">
 				<Option

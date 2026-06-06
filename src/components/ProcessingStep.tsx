@@ -1,8 +1,9 @@
 import { useState } from 'react';
 import type { PublicJob } from '../types';
-import { downloadNameForJob, previewTranscript, subForJob, titleForStatus, timeRemaining, transcriptNameForJob } from '../lib/format';
-import { DownloadIcon, TranscriptIcon } from './icons';
+import { downloadNameForJob, previewTranscript, subForJob, timeRemaining, titleForStatus, transcriptNameForJob } from '../lib/format';
+import { DownloadIcon, TranscriptIcon, WaveIcon } from './icons';
 import { StatusBadge } from './StatusBadge';
+import { StepHeader } from './StepHeader';
 
 interface ProcessingStepProps {
 	job: PublicJob;
@@ -38,24 +39,20 @@ export function ProcessingStep({ job, busy, onReset, onAddEmail }: ProcessingSte
 
 	return (
 		<section className="flex flex-col gap-[18px] animate-step-in step-in">
-			<h1 className="text-[19px] font-semibold tracking-[-0.015em] text-fg">{titleForStatus(status)}</h1>
-			<p className="-mt-3.5 text-xs leading-normal text-fg-3">{subForJob(job, status)}</p>
+			<StepHeader title={titleForStatus(status)}>{subForJob(job, status)}</StepHeader>
 
-			<div className="flex flex-col overflow-hidden rounded-md bg-surface-2 shadow-[inset_0_0_0_1px_var(--border)]">
-				<div className="flex items-center justify-between gap-3 px-3.5 py-[11px] text-[13px] [&:not(:last-child)]:shadow-[0_1px_0_var(--border)]">
-					<span className="shrink-0 text-fg-2">Status</span>
-					<StatusBadge status={status} />
-				</div>
-				<div className="flex items-center justify-between gap-3 px-3.5 py-[11px] text-[13px] [&:not(:last-child)]:shadow-[0_1px_0_var(--border)]">
-					<span className="shrink-0 text-fg-2">File</span>
-					<span className="min-w-0 truncate text-right text-fg" title={job.inputName}>
+			{/* File, expiry, and live status folded into one chip. */}
+			<div className="flex items-center gap-3 rounded-lg bg-surface-2 p-2.5 shadow-[inset_0_0_0_1px_var(--border)]">
+				<span className="grid h-9 w-9 shrink-0 place-items-center rounded-sm bg-accent-soft text-accent">
+					<WaveIcon className="h-[18px] w-[18px]" />
+				</span>
+				<div className="flex min-w-0 flex-1 flex-col gap-0.5">
+					<strong className="truncate text-[13px] font-medium text-fg" title={job.inputName}>
 						{job.inputName}
-					</span>
+					</strong>
+					<span className="text-[11px] tabular-nums text-fg-3">Expires in {timeRemaining(job.expiresAt)}</span>
 				</div>
-				<div className="flex items-center justify-between gap-3 px-3.5 py-[11px] text-[13px]">
-					<span className="shrink-0 text-fg-2">Expires</span>
-					<span className="min-w-0 truncate text-right tabular-nums text-fg">{timeRemaining(job.expiresAt)}</span>
-				</div>
+				<StatusBadge status={status} />
 			</div>
 
 			{hasResult && (
@@ -125,11 +122,9 @@ export function ProcessingStep({ job, busy, onReset, onAddEmail }: ProcessingSte
 					</form>
 				))}
 
-			<div className="mt-1 flex items-center justify-between gap-2">
-				<button className="btn btn-ghost" type="button" onClick={onReset} disabled={busy}>
-					Clean another
-				</button>
-			</div>
+			<button className="btn btn-ghost btn-block mt-1" type="button" onClick={onReset} disabled={busy}>
+				Clean another
+			</button>
 		</section>
 	);
 }

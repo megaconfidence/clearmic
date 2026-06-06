@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { formatBytes, labelForType } from '../lib/format';
 import { CloseIcon, UploadIcon, WaveIcon } from './icons';
+import { StepHeader } from './StepHeader';
 
 interface FileStepProps {
 	file: File | null;
@@ -39,8 +40,7 @@ export function FileStep({ file, onFile, onContinue, busy }: FileStepProps) {
 
 	return (
 		<section className="flex flex-col gap-[18px] animate-step-in step-in">
-			<h1 className="text-[19px] font-semibold tracking-[-0.015em] text-fg">Upload audio</h1>
-			<p className="-mt-3.5 text-xs leading-normal text-fg-3">Drop a recording and we'll clean up the noise.</p>
+			<StepHeader title="Upload audio">Drop a recording and we'll clean up the noise.</StepHeader>
 
 			<div
 				className={containerClass}
@@ -102,7 +102,9 @@ export function FileStep({ file, onFile, onContinue, busy }: FileStepProps) {
 				)}
 			</div>
 
-			<div className="mt-1 flex justify-end">
+			<p className="text-center text-[11px] leading-normal text-fg-3">No sign-up · audio and links auto-delete after 24 hours.</p>
+
+			<div className="flex justify-end">
 				<button className="btn btn-primary" type="button" onClick={onContinue} disabled={!file || busy}>
 					Continue
 				</button>

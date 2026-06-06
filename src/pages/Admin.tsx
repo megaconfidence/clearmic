@@ -199,14 +199,14 @@ export function Admin() {
 						<ErrorBanner message={error} />
 
 						{stats && allTime && live && (
-							<div className="flex flex-col gap-8 animate-step-in">
+							<div className="flex flex-col gap-7 animate-step-in">
 								<section>
 									<SectionTitle>Overview</SectionTitle>
 									<div className="grid grid-cols-2 gap-3 min-[720px]:grid-cols-4">
 										<Stat label="Jobs all-time" value={allTime.jobs} sub={`${live.jobs} active now`} />
-										<Stat label="Audio processed" value={formatBytes(allTime.inputBytes)} sub="all-time input" />
-										<Stat label="Completion rate" value={`${completionRate}%`} sub={`${allTime.completed} completed`} />
-										<Stat label="Pending uploads" value={stats.uploads.pending} sub="awaiting completion" />
+										<Stat label="Completion rate" value={`${completionRate}%`} sub={`${allTime.completed} of ${allTime.jobs}`} />
+										<Stat label="Audio processed" value={formatBytes(allTime.inputBytes)} sub={`avg ${formatBytes(allTime.avgInputBytes)}`} />
+										<Stat label="Email opt-in" value={allTime.emailOptIn} sub={`${optInRate}% of jobs`} />
 									</div>
 								</section>
 
@@ -230,15 +230,6 @@ export function Admin() {
 								</section>
 
 								<section>
-									<SectionTitle>Delivery &amp; data · all-time</SectionTitle>
-									<div className="grid grid-cols-2 gap-3 min-[560px]:grid-cols-3">
-										<Stat label="Email opt-in" value={allTime.emailOptIn} sub={`${optInRate}% of jobs`} />
-										<Stat label="Avg file size" value={formatBytes(allTime.avgInputBytes)} sub="per job" />
-										<Stat label="Rate limit" value={stats.dailyJobLimit} sub="files / IP / day" />
-									</div>
-								</section>
-
-								<section>
 									<SectionTitle>Live · last 24h</SectionTitle>
 									<div className="grid grid-cols-2 gap-3 min-[560px]:grid-cols-3 min-[720px]:grid-cols-5">
 										<StatusStat label="queued" value={live.byStatus.queued} color="text-amber" />
@@ -247,6 +238,9 @@ export function Admin() {
 										<StatusStat label="failed" value={live.byStatus.failed} color="text-err" />
 										<StatusStat label="canceled" value={live.byStatus.canceled} color="text-fg-2" />
 									</div>
+									<p className="mt-3 text-xs tabular-nums text-fg-3">
+										{stats.uploads.pending} pending upload{stats.uploads.pending === 1 ? '' : 's'} · limit {stats.dailyJobLimit}/IP/day
+									</p>
 								</section>
 							</div>
 						)}
