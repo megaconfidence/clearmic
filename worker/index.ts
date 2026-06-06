@@ -88,25 +88,26 @@ async function routeRequest(request: Request, env: AppEnv): Promise<Response> {
 
 	const jobId = decodeURIComponent(match[1]);
 	const action = match[2];
-	// Secret tokens travel as a path segment (…/download/<token>) so emailed
-	// links don't look like credential-bearing query strings to spam filters.
-	// The legacy ?token= form is still honored for links issued before this.
-	const token = match[3] ? decodeURIComponent(match[3]) : url.searchParams.get("token");
+	// Download/transcript secrets travel as a path segment (…/download/<token>)
+	// so emailed links aren't query strings that trip mail-security scanners.
+	const pathToken = match[3] ? decodeURIComponent(match[3]) : null;
 
 	if (!action && request.method === "GET") {
 		return getJobStatus(jobId, request, env);
 	}
 
+	// Server-to-server: Replicate fetches the source audio, so its token stays in
+	// the query string — these URLs are never emailed or seen by a mail scanner.
 	if (action === "input" && request.method === "GET") {
-		return getInputAudio(jobId, token, env);
+		return getInputAudio(jobId, url.searchParams.get("token"), env);
 	}
 
 	if (action === "download" && request.method === "GET") {
-		return downloadOutput(jobId, token, env);
+		return downloadOutput(jobId, pathToken, env);
 	}
 
 	if (action === "transcript" && request.method === "GET") {
-		return downloadTranscript(jobId, token, env);
+		return downloadTranscript(jobId, pathToken, env);
 	}
 
 	if (action === "webhook" && request.method === "POST") {
