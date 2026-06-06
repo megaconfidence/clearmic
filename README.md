@@ -51,7 +51,7 @@ Drop a file, choose at least one processing step, get clean audio and/or a trans
 - Optional email is used **only to send your download links, then discarded** — never stored
 - Only anonymous aggregate usage counts are kept long-term — never audio, filenames, or personal data
 - No tracking, no analytics, no third-party ads
-- 30 processing jobs per day per IP — keeps costs sustainable and abuse contained
+- 30 processing jobs per hour per IP — keeps costs sustainable and abuse contained
 
 ## The engine
 

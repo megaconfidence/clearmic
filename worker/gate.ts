@@ -19,7 +19,7 @@ export async function gate(request: Request, env: AppEnv, turnstileToken: unknow
 	// 2) Per-IP rate limit — FAILS OPEN inside checkRateLimit.
 	const limit = await checkRateLimit(request, env);
 	if (!limit.allowed) {
-		return json({ error: `Daily limit reached. You can process ${limit.limit} files per day — try again later.` }, 429, {
+		return json({ error: `Hourly limit reached. You can process ${limit.limit} files per hour — try again later.` }, 429, {
 			"Retry-After": String(limit.retryAfter),
 			"X-RateLimit-Limit": String(limit.limit),
 			"X-RateLimit-Remaining": "0",

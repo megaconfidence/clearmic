@@ -6,7 +6,7 @@ import { DurableObject } from "cloudflare:workers";
 //
 // A true sliding window ("N in any rolling WINDOW") — not a fixed clock window,
 // which would let someone do 2×N by straddling the boundary.
-const WINDOW_MS = 24 * 60 * 60 * 1000; // rolling 24 hours
+const WINDOW_MS = 60 * 60 * 1000; // rolling 1 hour
 export const RATE_LIMIT = 30; // requests per IP per window
 
 export type RateLimitResult = {

@@ -239,7 +239,7 @@ export function Admin() {
 										<StatusStat label="canceled" value={live.byStatus.canceled} color="text-fg-2" />
 									</div>
 									<p className="mt-3 text-xs tabular-nums text-fg-3">
-										{stats.uploads.pending} pending upload{stats.uploads.pending === 1 ? '' : 's'} · limit {stats.dailyJobLimit}/IP/day
+										{stats.uploads.pending} pending upload{stats.uploads.pending === 1 ? '' : 's'} · limit {stats.jobLimit}/IP/hour
 									</p>
 								</section>
 							</div>

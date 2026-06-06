@@ -61,7 +61,7 @@ export interface JobResponse {
 
 export interface AdminStats {
 	generatedAt: string;
-	dailyJobLimit: number;
+	jobLimit: number;
 	statsSince: string | null;
 	uploads: {
 		pending: number;

@@ -76,7 +76,7 @@ export async function getAdminStats(request: Request, env: AppEnv): Promise<Resp
 	return json(
 		{
 			generatedAt: nowIso,
-			dailyJobLimit: RATE_LIMIT,
+			jobLimit: RATE_LIMIT,
 			statsSince: histSince ?? liveSince,
 			uploads: {
 				pending: num(uploadsRow?.pending),
